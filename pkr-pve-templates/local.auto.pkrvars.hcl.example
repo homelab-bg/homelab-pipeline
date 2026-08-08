@@ -1,0 +1,4 @@
+# Copy to local.auto.pkrvars.hcl and fill in your real LAN domain - local.auto.pkrvars.hcl
+# is gitignored and auto-loaded by Packer, this .example file is committed for reference only.
+
+lan_domain = "lan.example.internal"

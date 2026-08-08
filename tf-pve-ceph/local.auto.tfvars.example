@@ -1,0 +1,16 @@
+# Copy to local.auto.tfvars and fill in real values - local.auto.tfvars is gitignored
+# and auto-loaded by Terraform, this .example file is committed for reference only.
+
+lan_domain            = "lan.example.internal"
+ssh_private_key_path = "/root/.ssh/id_ed25519"
+
+mon_hosts = [
+  "192.168.0.201",
+  "192.168.0.202",
+  "192.168.0.203",
+]
+fsid = "00000000-0000-0000-0000-000000000000"
+
+# Use a throwaway identity while iterating - see README (Testing vs. production).
+# Only set this to "cephfs" once, deliberately, when testing is done.
+fs_name = "cephfs-test"

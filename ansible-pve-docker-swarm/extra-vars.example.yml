@@ -1,0 +1,22 @@
+---
+# Copy to extra-vars.yml and fill in real values - extra-vars.yml is gitignored.
+# Run with: ansible-playbook -i hosts.yml swarm-bootstrap.yml --ask-become-pass -e @extra-vars.yml
+
+traefik_username: yourname
+traefik_password: changeme
+traefik_email: traefik@example.internal
+traefik_domain: traefik.example.internal
+
+portainer_domain: portainer.example.internal
+portainer_license_key: changeme
+
+# CephFS - shared storage mounted on every swarm node at /mnt/cephfs.
+# See cephfs-mount.yml. client key comes from `ceph fs authorize cephfs client.swarm / rw`
+# on the PVE cluster - treat it like a secret.
+cephfs_mon_hosts:
+  - 192.168.0.31
+  - 192.168.0.32
+  - 192.168.0.33
+cephfs_name: cephfs
+cephfs_client_name: swarm
+cephfs_client_key: changeme

@@ -1,0 +1,13 @@
+---
+- name: Install Docker on every swarm node
+  import_playbook: docker-dependencies.yml
+- name: Mount shared CephFS storage on every swarm node
+  import_playbook: cephfs-mount.yml
+- name: Initialize the swarm on the bootstrap node
+  import_playbook: swarm-init.yml
+- name: Join the remaining nodes to the swarm
+  import_playbook: swarm-join.yml
+- name: Deploy Traefik
+  import_playbook: traefik/traefik.yml
+- name: Deploy Portainer
+  import_playbook: portainer/portainer.yml

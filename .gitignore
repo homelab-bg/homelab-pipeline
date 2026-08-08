@@ -1,0 +1,48 @@
+ # Terraform (tf-pve-*)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+tfplan
+*.tfplan
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+# Internal MinIO backend endpoint - never committed; backend "s3" blocks can't read
+# variables, so this is supplied via `terraform init -backend-config=backend.local.hcl`.
+# See backend.local.hcl.example for the shape.
+backend.local.hcl
+
+# Packer (pkr-pve-templates) — note: *.pkrvars.hcl is deliberately NOT ignored,
+# unlike *.tfvars — these configs carry no secrets and are meant to be versioned.
+packer_cache/
+packer-build/    # in case local_staging_dir ever points inside the repo instead of /tmp
+# Internal LAN domain suffix - not for public commit; see variables.pkr.hcl (lan_domain)
+local.auto.pkrvars.hcl
+
+# Ansible (ansible-pve-packer)
+*.retry
+*.vault_pass
+.vault_pass
+
+# Claude Code — settings.json is meant to be shared via git; only the local override stays untracked
+.claude/settings.local.json
+
+# Logs
+*.log
+crash.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+
+# Reference material only, never for commit - _example/ansible-docker-swarm/extra-vars.yml
+# currently carries a real domain + a plaintext Traefik password.
+/_example/
+
+# Separate, independent git repo (own remote: homelab-bg/docker-traefik-portainer) cloned
+# here for editing convenience - never vendor its history into this repo.
+/docker-traefik-portainer/

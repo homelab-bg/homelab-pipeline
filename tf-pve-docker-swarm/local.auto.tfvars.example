@@ -1,0 +1,30 @@
+# Copy to local.auto.tfvars and fill in real values - local.auto.tfvars is gitignored
+# and auto-loaded by Terraform, this .example file is committed for reference only.
+
+lan_domain        = "lan.example.internal"
+searchdomain      = "example.internal"
+nameservers       = ["10.0.0.2", "10.0.0.3"]
+gateway           = "10.0.0.1"
+ipaddr_network    = "10.0.0"
+minio_s3_endpoint = "https://minio.example.internal:30000"
+
+authorized_github_users = ["your-github-username"]
+
+configuration = [
+  {
+    vmid        = 100066
+    ipaddr_id   = 66
+    docker_role = "worker"
+    node_count  = 1
+    sockets     = 1
+    cores       = 1
+    memory      = 8192
+    disks = [
+      {
+        size    = 12
+        storage = "local-zfs"
+        slot    = "virtio0"
+      },
+    ]
+  },
+]

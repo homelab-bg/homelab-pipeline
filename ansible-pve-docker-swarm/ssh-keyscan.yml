@@ -1,0 +1,12 @@
+---
+# One-off helper, not part of swarm-bootstrap.yml - run manually once per new/rebuilt
+# node so its host key is trusted before the first real playbook run:
+#   ansible-playbook -i hosts.yml ssh-keyscan.yml
+- name: Seed known_hosts with each node's SSH host key
+  hosts: swarm
+  gather_facts: false
+  tasks:
+    - name: Run ssh-keyscan to add keys to known_hosts
+      ansible.builtin.shell: ssh-keyscan {{ ansible_host }} >> ~/.ssh/known_hosts
+      delegate_to: localhost
+      changed_when: true

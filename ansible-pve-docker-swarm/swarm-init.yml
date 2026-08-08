@@ -1,0 +1,7 @@
+---
+- name: Initialize the swarm
+  hosts: bootstrap
+  tasks:
+    - name: Initialize the swarm on the bootstrap node
+      community.docker.docker_swarm:
+        state: present
