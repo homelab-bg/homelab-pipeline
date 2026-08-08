@@ -7,7 +7,5 @@
   import_playbook: swarm-init.yml
 - name: Join the remaining nodes to the swarm
   import_playbook: swarm-join.yml
-- name: Deploy Traefik
-  import_playbook: traefik/traefik.yml
-- name: Deploy Portainer
-  import_playbook: portainer/portainer.yml
+- name: Deploy Traefik + Portainer
+  import_playbook: traefik-portainer.yml

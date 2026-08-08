@@ -2,7 +2,7 @@
 
 Turns the 3 VMs provisioned by `../tf-pve-docker-swarm` into a working Docker Swarm cluster, then deploys Traefik (reverse proxy/TLS) and Portainer Business Edition behind it.
 
-Starting point was `_example/ansible-docker-swarm/` (a copy of [rodrigoegimenez/ansible-docker-swarm-cluster](https://github.com/rodrigoegimenez/ansible-docker-swarm-cluster)), reviewed and adapted - see decisions below for what changed and why.
+The swarm bootstrap (Docker install, CephFS mount, swarm init/join) started from `_example/ansible-docker-swarm/` (a copy of [rodrigoegimenez/ansible-docker-swarm-cluster](https://github.com/rodrigoegimenez/ansible-docker-swarm-cluster)), reviewed and adapted - see decisions below for what changed and why. Traefik/Portainer come from a separate repo, [homelab-bg/docker-traefik-portainer](https://github.com/homelab-bg/docker-traefik-portainer) - see Services below.
 
 ## Topology
 
@@ -22,8 +22,9 @@ All 3 nodes join as Swarm **managers** - no dedicated worker-only nodes.
 
 ## Services
 
-- **Traefik** - reverse proxy + Let's Encrypt TLS, HTTP basic auth on its own dashboard.
-- **Portainer Business Edition** (`portainer/portainer-ee`, not the CE image) - 3-node license, used for GitOps stack deployment from a GitHub repo. License activation and GitOps repo/webhook configuration happen through Portainer's own UI/API after first boot - **not automated by this playbook**, that's a follow-up once the cluster is actually up and reachable.
+- **Traefik** - reverse proxy + Let's Encrypt TLS via Route53 DNS-01 challenge. **No auth on its dashboard** - the stack (from [homelab-bg/docker-traefik-portainer](https://github.com/homelab-bg/docker-traefik-portainer)) doesn't have a basicauth middleware, so `traefik_domain` is reachable to anyone who can resolve/reach it, guarded only by TLS. Worth hardening later.
+- **Portainer Business Edition** (`portainer_edition: ee`) - 3-node license, used for GitOps stack deployment from a GitHub repo. License activation and GitOps repo/webhook configuration happen through Portainer's own UI/API after first boot - **not automated by this playbook**, that's a follow-up once the cluster is actually up and reachable.
+- Both come from a single stack, deployed by `traefik-portainer.yml`: it `rsync`s a local clone of `../docker-traefik-portainer` (kept alongside this repo, own git history/remote - see that repo's README) to the bootstrap node and runs `docker stack deploy -c docker-compose.yml -c docker-compose.swarm.yml traefik-portainer`. The swarm overlay bind-mounts both services' persistent state under the shared CephFS mount instead of node-local volumes, so neither needs a placement constraint - see CephFS below.
 - Jenkins from the original example was dropped entirely - not part of the plan.
 
 ## Prerequisites
@@ -45,16 +46,15 @@ docker-dependencies.yml    installs Docker on all 3 nodes
 cephfs-mount.yml           installs ceph-common, mounts shared CephFS at /mnt/cephfs on all 3 nodes
 swarm-init.yml             `docker swarm init` on the bootstrap node
 swarm-join.yml             other 2 nodes join as managers
+traefik-portainer.yml      rsyncs ../docker-traefik-portainer to the bootstrap node, `docker stack deploy`s it
 ssh-keyscan.yml            standalone helper - not part of the bootstrap chain
-traefik/                   traefik.yml (playbook) + docker-compose.yml (stack)
-portainer/                 portainer.yml (playbook) + docker-compose.yml (stack)
 ```
 
 ## CephFS
 
 All 3 nodes mount a shared CephFS filesystem at `/mnt/cephfs` (`cephfs-mount.yml`), backed by the same PVE/Ceph cluster the VMs run on - MDS on all 3 PVE nodes (1 active + 2 standby), a dedicated `client.swarm` CephX key scoped read-write to just this filesystem (not `client.admin`). Mounted via the kernel CephFS client directly (`mount -t ceph <mons>:/ /mnt/cephfs -o name=swarm,fs=cephfs`), talking straight to the mons over the existing LAN - no Proxmox storage passthrough involved, and no Terraform changes needed since the VMs and mons are already on the same LAN.
 
-This exists so stacks with node-local state (e.g. Traefik's cert volume, Portainer's data volume) can bind to a path under `/mnt/cephfs` instead of a `local` Docker volume - any node can then run the container without losing data on reschedule, removing the need for `docker node update --label-add` placement pinning.
+This exists so stacks with node-local state can bind to a path under `/mnt/cephfs` instead of a `local` Docker volume - any node can then run the container without losing data on reschedule, removing the need for `docker node update --label-add` placement pinning. `docker-traefik-portainer`'s `docker-compose.swarm.yml` overlay does exactly this for Traefik's cert volume and Portainer's data volume.
 
 `docker-dependencies.yml` deliberately differs from the original example: it uses `get_url` + `signed-by=` for Docker's apt key instead of the deprecated `apt_key` module, detects the VM's actual Ubuntu codename (`ansible_distribution_release`) instead of a hardcoded `focal`, and installs the current `docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin` package set instead of the EOL standalone `docker-compose`. Also installs `python3-docker` (the Docker SDK for Python) - found missing on the first real run, since `community.docker.*` modules need it on the **managed** node, not just the control node.
 
@@ -84,7 +84,9 @@ cp hosts.yml.example hosts.yml             # then fill in real node IPs
 cp extra-vars.example.yml extra-vars.yml   # then fill in real values below
 ```
 
-Both `hosts.yml` and `extra-vars.yml` are gitignored - same convention as `local.auto.tfvars` on the Terraform side. `extra-vars.yml` needs: `traefik_username`, `traefik_password`, `traefik_email`, `traefik_domain`, `portainer_domain`, `portainer_license_key`, `cephfs_mon_hosts`, `cephfs_name`, `cephfs_client_name`, `cephfs_client_key`.
+Both `hosts.yml` and `extra-vars.yml` are gitignored - same convention as `local.auto.tfvars` on the Terraform side. `extra-vars.yml` needs: `traefik_email`, `traefik_domain`, `traefik_version`, `portainer_domain`, `portainer_license_key`, `portainer_edition`, `portainer_version`, `portainer_port`, `network_name`, `monitoring_stack`, `route53_access_key_id`, `route53_secret_access_key`, `route53_region`, `route53_hosted_zone_id`, `cephfs_mon_hosts`, `cephfs_name`, `cephfs_client_name`, `cephfs_client_key`. See `extra-vars.example.yml` for defaults/shape - most have sensible defaults baked into `traefik-portainer.yml`, only the Route53 credentials and the two domains are truly required.
+
+This repo also expects `../docker-traefik-portainer` to exist (a separate clone of [homelab-bg/docker-traefik-portainer](https://github.com/homelab-bg/docker-traefik-portainer), own git history/remote) alongside it - `traefik-portainer.yml` rsyncs from there, it's not vendored into this repo.
 
 ## Running
 
@@ -92,9 +94,9 @@ Both `hosts.yml` and `extra-vars.yml` are gitignored - same convention as `local
 ansible-playbook -i hosts.yml swarm-bootstrap.yml -e @extra-vars.yml
 ```
 
-Runs, in order: `docker-dependencies.yml` → `swarm-init.yml` → `swarm-join.yml` → `traefik/traefik.yml` → `portainer/portainer.yml`.
+Runs, in order: `docker-dependencies.yml` → `cephfs-mount.yml` → `swarm-init.yml` → `swarm-join.yml` → `traefik-portainer.yml`.
 
-Individual playbooks can be run on their own the same way (e.g. `ansible-playbook -i hosts.yml traefik/traefik.yml -e @extra-vars.yml`) if you only need to redeploy one stack.
+Individual playbooks can be run on their own the same way (e.g. `ansible-playbook -i hosts.yml traefik-portainer.yml -e @extra-vars.yml`) if you only need to redeploy the stack - e.g. after pushing a change to `docker-traefik-portainer`.
 
 (Both examples above assume passwordless sudo for the `ubuntu` user, which cloud-init sets up by default - add `--ask-become-pass` back if that's not the case in your setup.)
 
@@ -109,10 +111,11 @@ ansible-playbook -i hosts.yml ssh-keyscan.yml
 - Log into Portainer at `https://<portainer_domain>`, activate the Business Edition license, and configure the GitOps stack pointing at the target GitHub repo (PAT/webhook as needed).
 - Confirm `docker node ls` on any node shows all 3 as `Leader`/`Reachable` managers.
 
-## Known assumptions to verify on the first real run
+## Known assumptions, verified on the first real run (2026-08-08)
 
-- **Node labeling** (`docker node update --label-add ... {{ inventory_hostname }}` in `traefik.yml`/`portainer.yml`) assumes the Proxmox VM's actual guest hostname matches its Terraform `name`. **Confirmed true** against the real nodes (`hostname` reports `docker-worker-300x`, matching `main.tf`'s naming and now `hosts.yml`) - the bpg/proxmox provider does set the cloud-init hostname from the VM name by default.
-- **Docker's apt repo may not have a `resolute` (Ubuntu 26.04) component yet** - `docker-dependencies.yml` will fail at the `apt_repository`/install step if so. Confirmed the VMs do report `ansible_distribution_release: resolute`; whether Docker's repo actually has that component is confirmed by the first real `docker-dependencies.yml` run. If it doesn't, the fallback is pinning to a known-good codename (e.g. `noble`) instead of auto-detecting - not implemented yet.
+- **Docker's apt repo may not have a `resolute` (Ubuntu 26.04) component yet** - `docker-dependencies.yml` would have failed at the `apt_repository`/install step if so. **Confirmed it does** - `swarm-bootstrap.yml` ran clean end to end (`docker-dependencies.yml` → `cephfs-mount.yml` → `swarm-init.yml` → `swarm-join.yml`) against all 3 nodes, zero failures. Docker 29.7.2 installed, `docker node ls` shows all 3 as `Ready`/`Active` (1 `Leader`, 2 `Reachable`), CephFS mounted at `/mnt/cephfs` on all 3 and persisted in `/etc/fstab`. The `ansible-core 2.16.3` / `community.docker` version mismatch (see Linting) produced a warning but no actual failures.
+- **Full reboot survived cleanly** - all 3 nodes rebooted simultaneously (nothing deployed yet, so no rolling-reboot concern), CephFS remounted correctly via `_netdev` in `/etc/fstab`, Docker came back active, and the swarm quorum reformed (leadership moved to a different node, as expected for a non-permanent leader).
+- **`traefik-portainer.yml` verified working end to end**, including real Let's Encrypt certificates via Route53 DNS-01 for both `traefik_domain` and `portainer_domain` (confirmed via direct TLS handshake with correct SNI, not just HTTP status - a plain `Host:` header on a bare-IP request isn't enough to see the real cert, since TLS cert selection happens at SNI time, before the HTTP layer). Getting there surfaced five real bugs in the upstream `docker-traefik-portainer` repo, all now fixed there (see its commit history): `docker stack deploy`'s compose parser rejects bare YAML booleans in `labels:` (docker compose's is more lenient); Traefik v3 removed `providers.docker.swarmMode` for a separate Swarm Provider; Swarm mode doesn't auto-create missing bind-mount host directories (`docker run`/`docker compose up` do); the Swarm Provider reads `deploy.labels`, not the plain `labels:` the Docker provider uses (the big one - without this, every service was silently filtered out, docker-compose.yml swarm overlay was updated to deploy.labels approach); and the `traefik` service's own dashboard router (`service: api@internal`) still needs an explicit `loadbalancer.server.port` label or the provider errors trying to build its unused default service.
 
 ## Not in this pass
 

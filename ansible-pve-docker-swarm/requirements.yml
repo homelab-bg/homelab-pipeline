@@ -1,4 +1,4 @@
 ---
 collections:
   - name: community.docker
-  - name: ansible.posix # provides the `synchronize` module used by traefik.yml/portainer.yml
+  - name: ansible.posix # provides the `synchronize` module used by traefik-portainer.yml

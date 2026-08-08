@@ -2,13 +2,35 @@
 # Copy to extra-vars.yml and fill in real values - extra-vars.yml is gitignored.
 # Run with: ansible-playbook -i hosts.yml swarm-bootstrap.yml --ask-become-pass -e @extra-vars.yml
 
-traefik_username: yourname
-traefik_password: changeme
+# NOTE: the docker-traefik-portainer stack's dashboard router carries no auth
+# middleware - traefik_domain is reachable to anyone who can resolve/reach it,
+# guarded only by TLS. Worth adding a basicauth middleware later if this needs
+# hardening (traefik_username/traefik_password aren't consumed anywhere yet -
+# no vars for it below since nothing reads them).
 traefik_email: traefik@example.internal
 traefik_domain: traefik.example.internal
+traefik_version: v3.7.10 # v3.6.0+ required on Docker 29+ hosts, see docker-traefik-portainer/.env.example
 
 portainer_domain: portainer.example.internal
 portainer_license_key: changeme
+portainer_edition: ee
+portainer_version: 2.33.1
+portainer_port: 9000
+
+# Shared overlay network name - same default ("traefik") as docker-hello-world
+# and docker-traefik-portainer, so other stacks attach without an override.
+network_name: traefik
+
+# Promtail logging label (x-common-labels.stackname in docker-compose.yml) -
+# cosmetic, no functional dependency on a promtail instance actually existing.
+monitoring_stack: traefik-portainer
+
+# Route53 DNS-01 challenge credentials - scope this IAM user/role to just the
+# Route53 permissions in docker-traefik-portainer/README.md, not full access.
+route53_access_key_id: changeme
+route53_secret_access_key: changeme
+route53_region: us-east-1
+route53_hosted_zone_id: ""
 
 # CephFS - shared storage mounted on every swarm node at /mnt/cephfs.
 # See cephfs-mount.yml. client key comes from `ceph fs authorize cephfs client.swarm / rw`
