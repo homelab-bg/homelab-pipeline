@@ -8,6 +8,12 @@ gateway           = "10.0.0.1"
 ipaddr_network    = "10.0.0"
 minio_s3_endpoint = "https://minio.example.internal:30000"
 
+# See tf-dns-technitium/variables.tf - no trailing slash on the URL.
+technitium_url   = "https://ns1.lan.example.internal"
+technitium_token = "changeme"
+traefik_domain   = "traefik.lan.example.internal"
+portainer_domain = "portainer.lan.example.internal"
+
 authorized_github_users = ["your-github-username"]
 
 configuration = [

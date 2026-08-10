@@ -10,6 +10,10 @@ terraform {
       source  = "hashicorp/http"
       version = "~> 3.6"
     }
+    technitium = {
+      source  = "kevynb/technitium"
+      version = "0.4.0"
+    }
   }
 
   backend "s3" {

@@ -56,6 +56,34 @@ variable "minio_s3_endpoint" {
   description = "MinIO S3 endpoint, e.g. https://minio.<lan_domain>:30000 - used only to read tf-pve-ceph's remote state (data source config can use variables, unlike the backend \"s3\" block above). No default - supply via a gitignored local.auto.tfvars (see local.auto.tfvars.example)."
 }
 
+# DNS - Traefik/Portainer round-robin A records, one per swarm node. See dns.tf.
+variable "technitium_url" {
+  type        = string
+  description = "Technitium API URL, e.g. https://ns1.<lan_domain> - NO TRAILING SLASH (see tf-dns-technitium/variables.tf for why). No default - supply via a gitignored local.auto.tfvars (see local.auto.tfvars.example)."
+}
+
+variable "technitium_token" {
+  type        = string
+  sensitive   = true
+  description = "Technitium API token, created out-of-band via the admin UI. No default - supply via a gitignored local.auto.tfvars (see local.auto.tfvars.example)."
+}
+
+variable "traefik_domain" {
+  type        = string
+  description = "Domain for the Traefik dashboard, e.g. traefik.<lan_domain> - matches ansible-pve-docker-swarm/extra-vars.yml's traefik_domain. No default - supply via a gitignored local.auto.tfvars (see local.auto.tfvars.example)."
+}
+
+variable "portainer_domain" {
+  type        = string
+  description = "Domain for Portainer, e.g. portainer.<lan_domain> - matches ansible-pve-docker-swarm/extra-vars.yml's portainer_domain. No default - supply via a gitignored local.auto.tfvars (see local.auto.tfvars.example)."
+}
+
+variable "dns_record_ttl" {
+  type        = number
+  default     = 3600
+  description = "TTL (seconds) for the Traefik/Portainer DNS records."
+}
+
 # Access
 variable "authorized_github_users" {
   type        = list(string)
