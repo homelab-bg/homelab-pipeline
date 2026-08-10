@@ -80,8 +80,20 @@ variable "portainer_domain" {
 
 variable "dns_record_ttl" {
   type        = number
-  default     = 3600
-  description = "TTL (seconds) for the Traefik/Portainer DNS records."
+  default     = 30
+  description = "TTL (seconds) for the Traefik/Portainer DNS records. Kept short since these are dynamic Failover APP records - a long TTL would let clients cache a since-failed-over address."
+}
+
+variable "traefik_failover_primary" {
+  type        = string
+  default     = "docker-worker-3001"
+  description = "Key into local.instances (see main.tf) for the node used as the primary Failover target for traefik_domain. Every other instance becomes the secondary pool."
+}
+
+variable "portainer_failover_primary" {
+  type        = string
+  default     = "docker-worker-3001"
+  description = "Key into local.instances (see main.tf) for the node used as the primary Failover target for portainer_domain. Every other instance becomes the secondary pool."
 }
 
 # Access
