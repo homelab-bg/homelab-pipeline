@@ -1,0 +1,18 @@
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+tfplan
+*.tfplan
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Real internal topology (domain, IP assignments) - not templated/committed for
+# now, unlike other modules' local.auto.tfvars pattern, since there's no good
+# way to genericize it without defeating the point of having it in Terraform.
+# Revisit once Steve's decided what he wants from this repo long-term.
+records.tf

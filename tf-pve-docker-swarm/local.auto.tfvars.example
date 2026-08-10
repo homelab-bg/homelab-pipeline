@@ -3,7 +3,7 @@
 
 lan_domain        = "lan.example.internal"
 searchdomain      = "example.internal"
-nameservers       = ["10.0.0.2", "10.0.0.3"]
+nameservers       = ["10.0.0.2", "10.0.0.3", "10.0.0.4"]
 gateway           = "10.0.0.1"
 ipaddr_network    = "10.0.0"
 minio_s3_endpoint = "https://minio.example.internal:30000"

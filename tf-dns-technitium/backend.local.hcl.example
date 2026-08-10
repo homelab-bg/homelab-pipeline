@@ -1,0 +1,6 @@
+# Copy to backend.local.hcl and fill in your real MinIO/S3 endpoint - backend.local.hcl
+# is gitignored. Use with: terraform init -backend-config=backend.local.hcl
+
+endpoints = {
+  s3 = "https://minio.example.internal:30000"
+}

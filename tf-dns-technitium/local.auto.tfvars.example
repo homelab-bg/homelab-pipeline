@@ -1,0 +1,9 @@
+# Copy to local.auto.tfvars and fill in real values - local.auto.tfvars is gitignored
+# and auto-loaded by Terraform, this .example file is committed for reference only.
+
+# No trailing slash - the provider builds request URLs via naive string
+# concatenation (apiURL + "/api/zones/records/add"), so a trailing slash here
+# produces a double-slash path that 404s with an empty body, surfacing as a
+# confusing "cannot decode JSON response: EOF" error instead of a clear 404.
+technitium_url   = "https://ns1.lan.example.internal"
+technitium_token = "changeme"
