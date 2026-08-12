@@ -43,6 +43,8 @@ Thumbs.db
 # currently carries a real domain + a plaintext Traefik password.
 /_example/
 
-# Separate, independent git repo (own remote: homelab-bg/docker-traefik-portainer) cloned
-# here for editing convenience - never vendor its history into this repo.
+# Separate, independent git repos (own remotes: homelab-bg/docker-traefik-portainer,
+# homelab-bg/docker-hello-world) cloned here for editing convenience - never
+# vendor their history into this repo.
 /docker-traefik-portainer/
+/docker-hello-world/
