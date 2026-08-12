@@ -26,3 +26,15 @@ route53_green_access_key_id: changeme
 route53_green_secret_access_key: changeme
 route53_green_region: us-east-1
 route53_green_hosted_zone_id: ""
+
+# CephFS - shared storage mounted on docker1 at /mnt/cephfs. See cephfs-mount.yml.
+# client key comes from `ceph fs authorize cephfs client.green / rw` on the PVE
+# cluster - own key, not swarm's client.swarm, same least-privilege-per-consumer
+# pattern as everything else in this pipeline.
+cephfs_mon_hosts:
+  - 10.0.0.201
+  - 10.0.0.202
+  - 10.0.0.203
+cephfs_name: cephfs
+cephfs_client_name: green
+cephfs_client_key: changeme

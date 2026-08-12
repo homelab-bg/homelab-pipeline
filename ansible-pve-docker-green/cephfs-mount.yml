@@ -1,0 +1,38 @@
+---
+- name: Mount shared CephFS storage on docker1
+  hosts: green
+  become: true
+  tasks:
+    - name: Install ceph-common (provides the mount.ceph helper)
+      ansible.builtin.apt:
+        name: ceph-common
+        state: present
+        update_cache: true
+
+    - name: Ensure /etc/ceph exists
+      ansible.builtin.file:
+        path: /etc/ceph
+        state: directory
+        mode: '0755'
+
+    - name: Write the CephFS client keyring
+      ansible.builtin.copy:
+        dest: "/etc/ceph/ceph.client.{{ cephfs_client_name }}.keyring"
+        content: |
+          [client.{{ cephfs_client_name }}]
+              key = {{ cephfs_client_key }}
+        mode: '0600'
+
+    - name: Ensure the CephFS mount point exists
+      ansible.builtin.file:
+        path: "{{ cephfs_mount_path | default('/mnt/cephfs') }}"
+        state: directory
+        mode: '0755'
+
+    - name: Mount CephFS (and persist to fstab)
+      ansible.posix.mount:
+        path: "{{ cephfs_mount_path | default('/mnt/cephfs') }}"
+        src: "{{ cephfs_mon_hosts | join(',') }}:/"
+        fstype: ceph
+        opts: "name={{ cephfs_client_name }},fs={{ cephfs_name }},noatime,_netdev"
+        state: mounted

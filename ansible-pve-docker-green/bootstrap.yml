@@ -1,5 +1,7 @@
 ---
 - name: Install Docker on docker1
   import_playbook: docker-dependencies.yml
+- name: Mount shared CephFS storage on docker1
+  import_playbook: cephfs-mount.yml
 - name: Deploy Traefik + Portainer
   import_playbook: traefik-portainer.yml

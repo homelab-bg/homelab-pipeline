@@ -10,6 +10,11 @@
 # AWS credentials for the Route53 DNS-01 challenge are delivered via a mounted
 # secrets file (AWS_SHARED_CREDENTIALS_FILE), not plain environment variables -
 # plain env vars are visible via `docker inspect`, this isn't.
+#
+# Persistent data bind-mounts onto CephFS (see cephfs-mount.yml) rather than
+# local named volumes - same VM-lifecycle-decoupling rationale as the swarm
+# build's traefik-portainer stack, even on a single host: a VM rebuild
+# shouldn't take the Portainer DB or issued certs with it.
 services:
   traefik:
     image: traefik:${TRAEFIK_VER:-v3.7.10}
@@ -42,7 +47,7 @@ services:
       - "443:443"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - traefik_letsencrypt:/letsencrypt
+      - /mnt/cephfs/docker-green/letsencrypt:/letsencrypt
     networks:
       - traefik
     labels:
@@ -64,7 +69,7 @@ services:
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - portainer_data:/data
+      - /mnt/cephfs/docker-green/portainer-data:/data
     networks:
       - traefik
     labels:
@@ -77,10 +82,6 @@ services:
 secrets:
   aws_credentials:
     file: ./secrets/aws_credentials
-
-volumes:
-  portainer_data:
-  traefik_letsencrypt:
 
 networks:
   traefik:
