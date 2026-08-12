@@ -1,0 +1,40 @@
+# Copy to local.auto.tfvars and fill in real values - local.auto.tfvars is gitignored
+# and auto-loaded by Terraform, this .example file is committed for reference only.
+
+lan_domain        = "lan.example.internal"
+searchdomain      = "example.internal"
+nameservers       = ["10.0.0.2", "10.0.0.3", "10.0.0.4"]
+gateway           = "10.0.0.1"
+minio_s3_endpoint = "https://minio.example.internal:30000"
+
+# See tf-dns-technitium/variables.tf - no trailing slash on the URL.
+technitium_url   = "https://ns1.lan.example.internal"
+technitium_token = "changeme"
+docker_domain    = "docker1.lan.example.green"
+portainer_domain = "portainer.lan.example.green"
+traefik_domain   = "traefik.lan.example.green"
+
+authorized_github_users = ["your-github-username"]
+
+vm = {
+  vmid     = 100067
+  name     = "docker1"
+  ipaddr   = "10.0.0.41"
+  node     = "pve3"
+  template = 926043
+  sockets  = 1
+  cores    = 2
+  memory   = 4096
+  disks = [
+    {
+      size    = 12
+      storage = "local-zfs"
+      slot    = "virtio0"
+    },
+    {
+      size    = 45
+      storage = "local-zfs"
+      slot    = "virtio1"
+    },
+  ]
+}
