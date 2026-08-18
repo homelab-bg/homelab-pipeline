@@ -15,6 +15,21 @@
 # local named volumes - same VM-lifecycle-decoupling rationale as the swarm
 # build's traefik-portainer stack, even on a single host: a VM rebuild
 # shouldn't take the Portainer DB or issued certs with it.
+#
+# dnsweaver watches Traefik's own labels and creates a CNAME (plus a
+# _dnsweaver.<host> TXT ownership marker) onto traefik.lan.homelab.green for
+# anything with a Host() rule under *.lan.homelab.green - so a
+# Portainer-deployed app gets working DNS without a manual Terraform step.
+# Verified live, not just from docs: backfills already-running containers on
+# startup (no restart needed), skips Portainer's own CNAME entirely since
+# it's Terraform-created rather than dnsweaver-owned, skips Traefik's own
+# record as a self-referential CNAME, and correctly creates/deletes both the
+# CNAME and TXT record across a real container's full lifecycle. On by
+# default via .env's COMPOSE_PROFILES=dnsweaver (see .env.example) -
+# profile-gated rather than unconditional so a fresh bootstrap without the
+# Technitium token provisioned yet doesn't fail to start, but still on by
+# default so a rebuild doesn't silently lose DNS automation with no obvious
+# signal anything's missing.
 services:
   traefik:
     image: traefik:${TRAEFIK_VER:-v3.7.10}
@@ -79,9 +94,31 @@ services:
       traefik.http.routers.portainer.tls.certresolver: letsencrypt
       traefik.http.services.portainer.loadbalancer.server.port: "${PORTAINER_PORT:-9000}"
 
+  dnsweaver:
+    image: maxamill/dnsweaver:${DNSWEAVER_VER:-latest}
+    restart: unless-stopped
+    profiles: ["dnsweaver"]
+    environment:
+      - DNSWEAVER_DOCKER_MODE=standalone
+      - DNSWEAVER_INSTANCES=internal
+      - DNSWEAVER_INTERNAL_TYPE=technitium
+      - DNSWEAVER_INTERNAL_URL=${TECHNITIUM_URL}
+      - DNSWEAVER_INTERNAL_TOKEN_FILE=/run/secrets/technitium_token
+      - DNSWEAVER_INTERNAL_ZONE=lan.homelab.green
+      - DNSWEAVER_INTERNAL_RECORD_TYPE=CNAME
+      - DNSWEAVER_INTERNAL_TARGET=${TRAEFIK_HOST}
+      - DNSWEAVER_INTERNAL_DOMAINS=*.lan.homelab.green
+      - DNSWEAVER_SOURCES=traefik
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    secrets:
+      - technitium_token
+
 secrets:
   aws_credentials:
     file: ./secrets/aws_credentials
+  technitium_token:
+    file: ./secrets/technitium_token
 
 networks:
   traefik:

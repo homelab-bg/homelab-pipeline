@@ -6,9 +6,9 @@ traefik_email: traefik@example.internal
 traefik_version: v3.7.10 # v3.6.0+ required on Docker 29+ hosts
 traefik_domain: traefik.lan.example.green
 
-# CNAME onto docker1.lan.example.green (see tf-pve-docker-green/dns.tf) - not
-# the host's own domain, so Portainer and the Traefik dashboard each get a
-# distinct hostname/cert rather than sharing docker1's.
+# CNAME onto traefik_domain, not docker1's own domain (see
+# tf-pve-docker-green/dns.tf) - reflects the actual request path (client ->
+# Traefik -> Portainer container) rather than the bare host address.
 portainer_domain: portainer.lan.example.green
 portainer_version: 2.33.1
 portainer_port: 9000
@@ -17,6 +17,17 @@ portainer_port: 9000
 # swarm's BE licence, since that licence is scoped to that Portainer instance.
 
 network_name: traefik
+
+# dnsweaver - dedicated Technitium user (e.g. "dnsweaver"), scoped to just
+# the internal lan.example.green zone (view/modify/delete permissions,
+# nothing else) via `POST /api/zones/permissions/set`, then a token created
+# for that user via `POST /api/user/createToken` (not the admin token) -
+# same out-of-band, least-privilege-per-consumer pattern as every other
+# credential in this pipeline. Confirm scoping worked by testing the token
+# against a zone it should NOT have access to before trusting it.
+technitium_url: https://ns1.lan.example.internal
+dnsweaver_version: v2.7.3
+dnsweaver_technitium_token: changeme
 
 # Route53 DNS-01 challenge credentials, scoped to the PUBLIC homelab.green
 # hosted zone - separate IAM user from bauer.com.au's, separate from the

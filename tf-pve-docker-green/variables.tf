@@ -73,12 +73,12 @@ variable "docker_domain" {
 
 variable "portainer_domain" {
   type        = string
-  description = "Domain for Portainer's UI (CNAME onto docker_domain), e.g. portainer.lan.homelab.green - matches ansible-pve-docker-green's extra-vars. No default - supply via a gitignored local.auto.tfvars (see local.auto.tfvars.example)."
+  description = "Domain for Portainer's UI (CNAME onto traefik_domain), e.g. portainer.lan.homelab.green - matches ansible-pve-docker-green's extra-vars. No default - supply via a gitignored local.auto.tfvars (see local.auto.tfvars.example)."
 }
 
 variable "traefik_domain" {
   type        = string
-  description = "Domain for the Traefik dashboard (CNAME onto docker_domain), e.g. traefik.lan.homelab.green - matches ansible-pve-docker-green's extra-vars. No default - supply via a gitignored local.auto.tfvars (see local.auto.tfvars.example)."
+  description = "Domain for the Traefik dashboard (direct A record, not a CNAME - see dns.tf), e.g. traefik.lan.homelab.green - matches ansible-pve-docker-green's extra-vars. No default - supply via a gitignored local.auto.tfvars (see local.auto.tfvars.example)."
 }
 
 variable "dns_record_ttl" {

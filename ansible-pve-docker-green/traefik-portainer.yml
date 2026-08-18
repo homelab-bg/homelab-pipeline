@@ -23,6 +23,12 @@
         dest: "{{ stack_dir }}/docker-compose.yml"
         mode: '0644'
 
+    - name: Copy the .env file (dnsweaver profile default)
+      ansible.builtin.copy:
+        src: files/.env
+        dest: "{{ stack_dir }}/.env"
+        mode: '0644'
+
     - name: Write the AWS credentials file for Traefik's Route53 DNS-01 challenge
       ansible.builtin.copy:
         dest: "{{ stack_dir }}/secrets/aws_credentials"
@@ -30,6 +36,12 @@
           [default]
           aws_access_key_id = {{ route53_green_access_key_id }}
           aws_secret_access_key = {{ route53_green_secret_access_key }}
+        mode: '0600'
+
+    - name: Write the Technitium API token file for dnsweaver
+      ansible.builtin.copy:
+        dest: "{{ stack_dir }}/secrets/technitium_token"
+        content: "{{ dnsweaver_technitium_token }}"
         mode: '0600'
 
     - name: Deploy the traefik-portainer stack
@@ -41,9 +53,11 @@
         PORTAINER_PORT: "{{ portainer_port | default('9000') }}"
         PORTAINER_VER: "{{ portainer_version | default('2.33.1') }}"
         TRAEFIK_VER: "{{ traefik_version | default('v3.7.10') }}"
+        DNSWEAVER_VER: "{{ dnsweaver_version | default('latest') }}"
         NETWORK: "{{ network_name | default('traefik') }}"
         AWS_REGION: "{{ route53_green_region | default('us-east-1') }}"
         AWS_HOSTED_ZONE_ID: "{{ route53_green_hosted_zone_id }}"
+        TECHNITIUM_URL: "{{ technitium_url }}"
       args:
         chdir: "{{ stack_dir }}"
       changed_when: true
