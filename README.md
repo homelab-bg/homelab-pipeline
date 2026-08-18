@@ -5,7 +5,7 @@ Packer + Terraform pipeline for a Proxmox VE homelab cluster (`pve1`/`pve2`/`pve
 ```
 pkr-pve-templates/    Packer: builds golden Ubuntu cloud-init templates, deploys them to every PVE node
 tf-pve-packer/         Terraform: provisions the "packer-builder" VM used to run the above
-tf-pve-test/           Terraform: single-VM smoke test, clones a template via DHCP
+tf-pve-template-smoketest/           Terraform: single-VM smoke test, clones a template via DHCP
 tf-pve-docker-swarm/   Terraform: the real docker swarm cluster, clones templates across all 3 nodes
 tf-pve-ceph/           Terraform: CephFS (MDS + filesystem) on the PVE cluster itself - own state,
                        deliberately decoupled from the VMs' lifecycle
@@ -48,7 +48,7 @@ The S3 backend reads the AWS_* vars automatically; nothing credential-related li
 1. **`tf-pve-packer`** — provision the dedicated `packer-builder` VM (needs nested virtualization enabled on its Proxmox node for libguestfs).
 2. Install Packer + `libguestfs-tools` (`virt-customize`) on that VM (or any other host with nested virt and SSH access to the PVE nodes) — not managed by this repo.
 3. **`pkr-pve-templates`** — from that host, build the golden template(s) and deploy to every target node.
-4. **`tf-pve-test`** — optional smoke test: clone a template, confirm cloud-init/guest-agent/SSH-key injection all work.
+4. **`tf-pve-template-smoketest`** — optional smoke test: clone a template, confirm cloud-init/guest-agent/SSH-key injection all work.
 5. **`tf-pve-docker-swarm`** — provision the real cluster.
 
 **`tf-pve-ceph`** doesn't fit this sequence - it targets the PVE cluster itself, not a VM, so it has no dependency on any of the above and can be applied any time. It does need to run before the Ansible CephFS-mount step in `ansible-pve-docker-swarm`, which reads its outputs.
@@ -91,12 +91,12 @@ If you build the `resolute` (26.04) template, note the `tf-pve-*` modules' `node
 
 ---
 
-## `tf-pve-test`
+## `tf-pve-template-smoketest`
 
 Single VM (`tf-test-01`, vm_id `100115`, DHCP) cloned from the `924041` (noble) template on `pve1` — a quick way to confirm templates/keys/guest-agent are working before touching the full cluster.
 
 ```sh
-cd tf-pve-test
+cd tf-pve-template-smoketest
 terraform init -backend-config=backend.local.hcl
 terraform plan  -out=tfplan
 terraform apply tfplan
@@ -166,6 +166,6 @@ Own backend `key` (`homelab/ceph/terraform.tfstate`), independent from every oth
 
 - **Changed `backend.local.hcl` or the committed backend block** → Terraform will refuse to plan/apply with "Backend initialization required"; re-run `terraform init -reconfigure -backend-config=backend.local.hcl`.
 - **`node_templates` vmids must exist** on their matching Proxmox node before any `tf-pve-*` module can clone from them — run the packer build first.
-- **`vm_id` collisions**: `tf-pve-packer` uses `112`, `tf-pve-test` uses `100115`, `tf-pve-docker-swarm` computes `vmid + n` per `configuration` entry — check your range doesn't overlap existing VMs.
+- **`vm_id` collisions**: `tf-pve-packer` uses `112`, `tf-pve-template-smoketest` uses `100115`, `tf-pve-docker-swarm` computes `vmid + n` per `configuration` entry — check your range doesn't overlap existing VMs.
 - All of the above assumes the state bucket (`terraform-state` in MinIO) already exists — Terraform's S3 backend doesn't create it for you.
 - **`tf-pve-ceph`'s `fs_name`**: double-check `local.auto.tfvars` before every `apply`/`destroy` while iterating — it's the only thing standing between a `cephfs-test` cycle and the real `cephfs` filesystem until `prevent_destroy` is added (see `tf-pve-ceph` section above).

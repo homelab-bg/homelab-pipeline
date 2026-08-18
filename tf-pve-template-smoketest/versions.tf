@@ -15,7 +15,7 @@ terraform {
   backend "s3" {
     # CONFIRM this matches the exact bucket name you created in MinIO
     bucket = "terraform-state"
-    key    = "homelab/test-vm/terraform.tfstate"
+    key    = "homelab/template-smoketest/terraform.tfstate"
     region = "us-east-1" # dummy value — required by the backend schema, unused by MinIO
 
     # endpoints.s3 is intentionally NOT set here - backend blocks can't reference

@@ -36,6 +36,7 @@
           - docker-buildx-plugin
           - docker-compose-plugin
           - python3-docker # Docker SDK for Python - required by the community.docker.* modules
+          - git # required by traefik-portainer.yml's ansible.builtin.git task
         state: present
         update_cache: true
 

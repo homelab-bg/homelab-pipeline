@@ -5,25 +5,41 @@
     stack_dir: "{{ ansible_env.HOME }}/traefik-portainer"
 
   tasks:
-    - name: Ensure remote stack directory exists
+    - name: Check whether the stack directory is already a git checkout
+      ansible.builtin.stat:
+        path: "{{ stack_dir }}/.git"
+      register: stack_dir_git
+
+    # One-time transition safety: an existing stack_dir from the old
+    # rsync-based deploy isn't a git repo, and `git clone` refuses to clone
+    # into an existing non-empty, non-git directory. Harmless on every
+    # later run once it's a real checkout (stat above finds .git, this is
+    # skipped) - secrets/ gets rewritten by the tasks below regardless, so
+    # there's nothing here worth preserving across the one-time wipe.
+    - name: Remove non-git stack directory before first git-based deploy
       ansible.builtin.file:
         path: "{{ stack_dir }}"
-        state: directory
-        mode: '0755'
+        state: absent
+      when: not stack_dir_git.stat.exists
+
+    # Clones directly from GitHub (public repo, no credentials needed on
+    # docker1) rather than rsyncing a local sibling clone - guarantees what's
+    # deployed always matches a real pushed commit, no risk of deploying
+    # stale or uncommitted local state. Untracked files (secrets/, below)
+    # survive a re-pull untouched - the git module's default (force=no)
+    # only refuses to overwrite local changes to *tracked* files, it never
+    # touches anything outside the repo's tracked tree.
+    - name: Clone/update docker-traefik-portainer from GitHub
+      ansible.builtin.git:
+        repo: https://github.com/homelab-bg/docker-traefik-portainer.git
+        dest: "{{ stack_dir }}"
+        version: main
 
     - name: Ensure secrets directory exists
       ansible.builtin.file:
         path: "{{ stack_dir }}/secrets"
         state: directory
         mode: '0700'
-
-    - name: Copy docker-traefik-portainer stack files
-      ansible.posix.synchronize:
-        src: "{{ playbook_dir }}/../docker-traefik-portainer/"
-        dest: "{{ stack_dir }}/"
-        rsync_opts:
-          - "--exclude=.git"
-          - "--exclude=secrets"
 
     - name: Write the AWS credentials file for Traefik's Route53 DNS-01 challenge
       ansible.builtin.copy:
