@@ -13,8 +13,9 @@ portainer_domain: portainer.lan.example.green
 portainer_version: 2.33.1
 portainer_port: 9000
 # No portainer_edition/portainer_license_key here - this stack defaults to
-# Portainer CE (files/docker-compose.yml's ${PORTAINER_EDITION:-ce}), not the
-# swarm's BE licence, since that licence is scoped to that Portainer instance.
+# Portainer CE (docker-traefik-portainer's docker-compose.yml has
+# ${PORTAINER_EDITION:-ce}), not the swarm's BE licence, since that licence
+# is scoped to that Portainer instance.
 
 network_name: traefik
 
@@ -27,6 +28,8 @@ network_name: traefik
 # against a zone it should NOT have access to before trusting it.
 technitium_url: https://ns1.lan.example.internal
 dnsweaver_version: v2.7.3
+dnsweaver_zone: lan.example.green
+dnsweaver_domains: "*.lan.example.green"
 dnsweaver_technitium_token: changeme
 
 # Route53 DNS-01 challenge credentials, scoped to the PUBLIC homelab.green
