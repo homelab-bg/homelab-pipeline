@@ -25,15 +25,19 @@
     # Clones directly from GitHub (public repo, no credentials needed on
     # docker1) rather than rsyncing a local sibling clone - guarantees what's
     # deployed always matches a real pushed commit, no risk of deploying
-    # stale or uncommitted local state. Untracked files (secrets/, below)
-    # survive a re-pull untouched - the git module's default (force=no)
-    # only refuses to overwrite local changes to *tracked* files, it never
-    # touches anything outside the repo's tracked tree.
+    # stale or uncommitted local state. Pinned to a release tag (see
+    # docker_traefik_portainer_version's default, YYYY.MM.releaseID) rather
+    # than tracking main, so a redeploy doesn't silently pick up whatever's
+    # newest - bump the tag deliberately when you want to move forward.
+    # Untracked files (secrets/, below) survive a re-pull untouched - the
+    # git module's default (force=no) only refuses to overwrite local
+    # changes to *tracked* files, it never touches anything outside the
+    # repo's tracked tree.
     - name: Clone/update docker-traefik-portainer from GitHub
       ansible.builtin.git:
         repo: https://github.com/homelab-bg/docker-traefik-portainer.git
         dest: "{{ stack_dir }}"
-        version: main
+        version: "{{ docker_traefik_portainer_version | default('2026.08.1') }}"
 
     - name: Ensure secrets directory exists
       ansible.builtin.file:
