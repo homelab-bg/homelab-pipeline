@@ -1,0 +1,8 @@
+# Copy to local.auto.tfvars and fill in real values - local.auto.tfvars is gitignored
+# and auto-loaded by Terraform, this .example file is committed for reference only.
+
+technitium_url   = "https://ns1.lan.example.internal"
+technitium_token = "changeme"
+
+secrets_domain = "secrets.lan.example.internal"
+secrets_ipaddr = "10.0.0.15"

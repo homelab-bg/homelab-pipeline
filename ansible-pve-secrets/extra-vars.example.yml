@@ -1,0 +1,31 @@
+---
+# Copy to extra-vars.yml and fill in real values - extra-vars.yml is gitignored.
+# Run with: ansible-playbook -i hosts.yml deploy.yml -e @extra-vars.yml
+
+docker_infisical_version: 2026.08.6
+
+secrets_domain: secrets.lan.example.internal
+
+# Where persistent data lives on the LXC's own disk - no default, a
+# deliberate choice, not something to silently fall back on. If the LXC's
+# disk is already on shared/replicated storage (e.g. Ceph RBD, needed for
+# PVE HA regardless), a plain path on it is durable without needing a
+# separate CephFS mount - see docker-infisical/README.md.
+secrets_data_dir: /data/docker-infisical
+
+# Infisical's own master keys and DB credentials - generate these, don't
+# invent them (see docker-infisical/README.md for exact commands), and
+# never reuse across environments.
+infisical_postgres_user: infisical
+infisical_postgres_password: changeme
+infisical_postgres_db: infisical
+infisical_encryption_key: changeme
+infisical_auth_secret: changeme
+
+# Route53 DNS-01 challenge credentials for Caddy, scoped to the same
+# lan.example.internal-adjacent public zone used for other key-infra hosts.
+route53_secrets_access_key_id: changeme
+route53_secrets_secret_access_key: changeme
+route53_secrets_region: us-east-1
+# Optional - skips an automatic by-name zone lookup.
+route53_secrets_hosted_zone_id: ""

@@ -1,0 +1,14 @@
+---
+# Copy to hosts.yml and fill in real values - hosts.yml is gitignored.
+all:
+  children:
+    secrets:
+      hosts:
+        secrets:
+          ansible_host: 192.168.0.15
+  vars:
+    ansible_user: root
+    ansible_python_interpreter: /usr/bin/python3
+    # No ansible_ssh_private_key_file here on purpose - auth relies on whoever's
+    # running this having a matching key available (ssh-agent, or a `Host 192.168.0.15`
+    # block in ~/.ssh/config), not a path hardcoded into the inventory.
