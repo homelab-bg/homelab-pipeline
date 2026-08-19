@@ -16,6 +16,8 @@ ansible-pve-docker-green/   Ansible: installs Docker, mounts CephFS, deploys Tra
 
 `ansible-pve-docker-green` deploys [`docker-traefik-portainer`](https://github.com/homelab-bg/docker-traefik-portainer) - a separate, public repo, not a subdirectory here. It's cloned directly onto the target host at deploy time (unauthenticated HTTPS), not kept as a local sibling checkout - see that repo's own README for the compose stack itself.
 
+See [`SECRETS.md`](SECRETS.md) for how credentials are organised in Infisical (project/folder/identity structure) and the minimal set of secrets that must survive outside it for disaster recovery.
+
 ## Prerequisites
 
 - Terraform >= 1.9, Packer with the `hashicorp/proxmox` plugin source available (`packer init` handles this), Ansible with the `community.docker` and `ansible.posix` collections (`ansible-galaxy collection install -r requirements.yml` in `ansible-pve-docker-green`)

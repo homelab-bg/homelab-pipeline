@@ -7,10 +7,11 @@ nameservers       = ["10.0.0.2", "10.0.0.3", "10.0.0.4"]
 gateway           = "10.0.0.1"
 minio_s3_endpoint = "https://minio.example.internal:30000"
 
-# See tf-dns-technitium/variables.tf - no trailing slash on the URL.
-technitium_url   = "https://ns1.lan.example.internal"
-technitium_token = "changeme"
-docker_domain    = "docker1.lan.example.green"
+infisical_host          = "https://secrets.lan.example.com"
+infisical_project_id    = "changeme"
+infisical_client_id     = "changeme"
+infisical_client_secret = "changeme"
+docker_domain           = "docker1.lan.example.green"
 portainer_domain = "portainer.lan.example.green"
 traefik_domain   = "traefik.lan.example.green"
 

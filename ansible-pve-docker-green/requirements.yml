@@ -2,3 +2,4 @@
 collections:
   - name: community.docker
   - name: ansible.posix # provides the `synchronize` module used by traefik-portainer.yml
+  - name: infisical.vault # provides the read_secrets lookup used by traefik-portainer.yml - also requires `pip install infisicalsdk`

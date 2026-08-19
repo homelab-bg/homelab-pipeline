@@ -14,6 +14,10 @@ terraform {
       source  = "kevynb/technitium"
       version = "0.4.0"
     }
+    infisical = {
+      source  = "infisical/infisical"
+      version = "0.19.24"
+    }
   }
 
   backend "s3" {

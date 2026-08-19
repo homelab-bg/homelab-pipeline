@@ -30,16 +30,15 @@ technitium_url: https://ns1.lan.example.internal
 dnsweaver_version: v2.7.3
 dnsweaver_zone: lan.example.green
 dnsweaver_domains: "*.lan.example.green"
-dnsweaver_technitium_token: changeme
 
-# Route53 DNS-01 challenge credentials, scoped to the PUBLIC homelab.green
-# hosted zone - separate IAM user from bauer.com.au's, separate from the
-# INTERNAL lan.homelab.green Technitium zone (see tf-pve-docker-green). See
-# the handover doc's draft least-privilege policy before widening this.
-route53_green_access_key_id: changeme
-route53_green_secret_access_key: changeme
-route53_green_region: us-east-1
-route53_green_hosted_zone_id: ""
+# dnsweaver_technitium_token and route53_green_* moved to Infisical
+# (/ansible-pve-docker-green folder, "prod" env) - traefik-portainer.yml
+# reads them at deploy time via the infisical.vault.read_secrets lookup,
+# authenticated through this playbook's own scoped machine identity below.
+infisical_host: https://secrets.lan.example.com
+infisical_project_id: changeme
+infisical_client_id: changeme
+infisical_client_secret: changeme
 
 # CephFS - shared storage mounted on docker1 at /mnt/cephfs. See cephfs-mount.yml.
 # client key comes from `ceph fs authorize cephfs client.green / rw` on the PVE
@@ -51,4 +50,6 @@ cephfs_mon_hosts:
   - 10.0.0.203
 cephfs_name: cephfs
 cephfs_client_name: green
-cephfs_client_key: changeme
+# cephfs_client_key moved to Infisical (/ansible-pve-docker-green folder) -
+# read at deploy time by cephfs-mount.yml via the same lookup as
+# traefik-portainer.yml.

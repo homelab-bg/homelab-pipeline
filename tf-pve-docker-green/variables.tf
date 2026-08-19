@@ -55,15 +55,25 @@ variable "vm" {
 # DNS - single A record, no Failover/Weighted Round Robin app needed here:
 # that mechanism exists to solve the multi-A-record fast-flux problem, which
 # doesn't arise with exactly one target. See dns.tf.
-variable "technitium_url" {
+variable "infisical_host" {
   type        = string
-  description = "Technitium API URL, e.g. https://ns1.<lan_domain> - NO TRAILING SLASH (see tf-dns-technitium/variables.tf for why). No default - supply via a gitignored local.auto.tfvars (see local.auto.tfvars.example)."
+  description = "Self-hosted Infisical instance URL. No default - supply via a gitignored local.auto.tfvars (see local.auto.tfvars.example)."
 }
 
-variable "technitium_token" {
+variable "infisical_project_id" {
+  type        = string
+  description = "Infisical project ID for homelab-pipeline. No default - supply via a gitignored local.auto.tfvars (see local.auto.tfvars.example)."
+}
+
+variable "infisical_client_id" {
+  type        = string
+  description = "Client ID for this module's scoped Infisical machine identity (read-only, /tf-dns-technitium folder). No default - supply via a gitignored local.auto.tfvars (see local.auto.tfvars.example)."
+}
+
+variable "infisical_client_secret" {
   type        = string
   sensitive   = true
-  description = "Technitium API token, created out-of-band via the admin UI. No default - supply via a gitignored local.auto.tfvars (see local.auto.tfvars.example)."
+  description = "Client secret for this module's scoped Infisical machine identity. No default - supply via a gitignored local.auto.tfvars (see local.auto.tfvars.example)."
 }
 
 variable "docker_domain" {

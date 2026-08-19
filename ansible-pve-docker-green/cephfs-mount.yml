@@ -2,6 +2,18 @@
 - name: Mount shared CephFS storage on docker1
   hosts: green
   become: true
+  vars:
+    # Same scoped machine identity/folder as traefik-portainer.yml - both
+    # playbooks belong to this module (see homelab-pipeline README).
+    cephfs_secrets: "{{ lookup('infisical.vault.read_secrets',
+      universal_auth_client_id=infisical_client_id,
+      universal_auth_client_secret=infisical_client_secret,
+      project_id=infisical_project_id,
+      env_slug='prod',
+      path='/ansible-pve-docker-green',
+      as_dict=True,
+      url=infisical_host
+      ) }}"
   tasks:
     - name: Install ceph-common (provides the mount.ceph helper)
       ansible.builtin.apt:
@@ -20,7 +32,7 @@
         dest: "/etc/ceph/ceph.client.{{ cephfs_client_name }}.keyring"
         content: |
           [client.{{ cephfs_client_name }}]
-              key = {{ cephfs_client_key }}
+              key = {{ cephfs_secrets.CEPHFS_CLIENT_KEY }}
         mode: '0600'
 
     - name: Ensure the CephFS mount point exists
