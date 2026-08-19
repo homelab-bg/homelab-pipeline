@@ -45,8 +45,9 @@ than one), secret keys `UPPER_SNAKE_CASE` matching what they'd be as env vars.
 | `/tf-dns-technitium` | `TECHNITIUM_URL`, `TECHNITIUM_TOKEN` | `tf-dns-technitium` (owner) | `tf-dns-technitium-reader` |
 | | | `tf-dns-secrets` | `tf-dns-secrets-technitium-reader` |
 | | | `tf-pve-docker-green` | `tf-pve-docker-green-technitium-reader` |
+| | | `homelab-ci`'s `terraform-plan-dns-technitium.yml` | `ci-tf-dns-technitium-reader` |
 | `/ansible-pve-docker-green` | `ROUTE53_GREEN_ACCESS_KEY_ID`, `ROUTE53_GREEN_SECRET_ACCESS_KEY`, `ROUTE53_GREEN_REGION`, `ROUTE53_GREEN_HOSTED_ZONE_ID`, `DNSWEAVER_TECHNITIUM_TOKEN`, `CEPHFS_CLIENT_KEY` | `ansible-pve-docker-green` (both `traefik-portainer.yml` and `cephfs-mount.yml`) | `ansible-pve-docker-green-reader` |
-| `/shared` | `MINIO_ACCESS_KEY_ID`, `MINIO_SECRET_ACCESS_KEY` | none automated - reference copy only, see below | - |
+| `/shared` | `MINIO_ACCESS_KEY_ID`, `MINIO_SECRET_ACCESS_KEY`, `MINIO_S3_ENDPOINT` | human reference; also read by `homelab-ci`'s `terraform-plan-dns-technitium.yml` via the CLI (backend creds can't come from the native provider - see below) | `ci-tf-dns-technitium-reader` |
 
 Reserved, currently-empty folders (created up front per the one-folder-per-consumer convention, populate
 as each module accumulates real secrets): `/ansible-pve-secrets`, `/pkr-pve-templates`,
@@ -71,13 +72,17 @@ somewhere the safe itself doesn't gate.
 **This is the complete list of what has to survive independently of Infisical** to rebuild the whole
 pipeline, including Infisical itself, from nothing:
 
-- **MinIO (Terraform state backend) credentials** - `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`,
-  exported manually before any `terraform init`/`plan`/`apply` (see root README). Root of trust for
-  every module's state, including `tf-dns-secrets` and `tf-pve-docker-green` which otherwise pull their
-  Technitium token from Infisical. A copy is stored in Infisical's `/shared` folder too, but only for
-  human reference/rotation-tracking - nothing reads it back out programmatically, since a Terraform
-  `backend "s3"` block is evaluated before any provider or data source can run, so it structurally
-  cannot be sourced from a `data "infisical_secrets"` block.
+- **MinIO (Terraform state backend) credentials** - for interactive use, `AWS_ACCESS_KEY_ID`/
+  `AWS_SECRET_ACCESS_KEY` are exported manually before any `terraform init`/`plan`/`apply` (see root
+  README) - root of trust for every module's state, including `tf-dns-secrets` and
+  `tf-pve-docker-green` which otherwise pull their Technitium token from Infisical. A copy (plus
+  `MINIO_S3_ENDPOINT`) is stored in Infisical's `/shared` folder too. A Terraform `backend "s3"` block
+  is evaluated before any provider or data source can run, so it structurally cannot be sourced from a
+  `data "infisical_secrets"` block the way the Technitium token is - but in CI (`homelab-ci`), unlike an
+  interactive shell, there's no human to run an `export` first, so the workflow shells out to the
+  Infisical CLI as a step before `terraform init` instead. Either way, the underlying MinIO credential
+  itself still has to exist somewhere outside Infisical originally - it's the CI job's own Infisical
+  identity credentials, not the MinIO creds, that are the thing GitHub Actions actually holds as secrets.
 - **Proxmox API token** (`PROXMOX_VE_API_TOKEN`) - needed by every `tf-pve-*` module and Packer.
 - **SSH private keys** - `tf-pve-ceph`'s `remote-exec` provisioners and Packer's `qm`-over-SSH both need
   direct key access, independent of Infisical.
