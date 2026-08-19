@@ -31,17 +31,25 @@ See [`SECRETS.md`](SECRETS.md) for how credentials are organised in Infisical (p
 
 ## One-time local setup
 
-Every module keeps its internal domain, network, and access-list values out of git. Each real file has a committed `.example` counterpart showing the required shape — on a fresh clone (or if a file is missing), copy and fill in the real values:
+Every module keeps its internal domain, network, and access-list values out of git. Each real file has a committed `.example` counterpart showing the required shape.
+
+The real values themselves live in the private [`homelab-pipeline-config`](https://github.com/homelab-bg/homelab-pipeline-config) repo (see its README for the full public/private pairing reasoning). Clone it as a sibling of this repo, then symlink each module's real files into place:
 
 ```sh
-cp local.auto.tfvars.example      local.auto.tfvars      # each tf-pve-*/tf-dns-* module
-cp backend.local.hcl.example      backend.local.hcl      # each tf-pve-*/tf-dns-* module
-cp local.auto.pkrvars.hcl.example local.auto.pkrvars.hcl # pkr-pve-templates
-cp hosts.yml.example              hosts.yml              # ansible-pve-docker-green
-cp extra-vars.example.yml         extra-vars.yml          # ansible-pve-docker-green
+cd ~/homelab-pipeline
+ln -s ../../homelab-pipeline-config/tf-dns-technitium/records.tf         tf-dns-technitium/records.tf
+ln -s ../../homelab-pipeline-config/tf-dns-technitium/local.auto.tfvars  tf-dns-technitium/local.auto.tfvars
+ln -s ../../homelab-pipeline-config/tf-dns-technitium/backend.local.hcl  tf-dns-technitium/backend.local.hcl
+# ... same pattern per module - see homelab-pipeline-config/README.md's Contents section for the full list
 ```
 
-All of these real filenames are gitignored — `git status` should never show them as untracked-and-stageable.
+Setting up a genuinely new module for the first time (nothing in `homelab-pipeline-config` yet)? Copy the `.example` file into `homelab-pipeline-config`'s matching directory, fill in real values, then symlink it back as above:
+
+```sh
+cp tf-dns-technitium/local.auto.tfvars.example ../homelab-pipeline-config/tf-dns-technitium/local.auto.tfvars
+```
+
+All of these real filenames are gitignored here — `git status` in this repo should never show them as untracked-and-stageable, whether or not the symlink exists yet.
 
 ## Environment variables (every `tf-pve-*`/`tf-dns-*` module)
 
