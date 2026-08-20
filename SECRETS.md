@@ -45,9 +45,10 @@ than one), secret keys `UPPER_SNAKE_CASE` matching what they'd be as env vars.
 | `/tf-dns-technitium` | `TECHNITIUM_URL`, `TECHNITIUM_TOKEN` | `tf-dns-technitium` (owner) | `tf-dns-technitium-reader` |
 | | | `tf-dns-secrets` | `tf-dns-secrets-technitium-reader` |
 | | | `tf-pve-docker-green` | `tf-pve-docker-green-technitium-reader` |
-| | | `homelab-ci`'s `terraform-plan-dns-technitium.yml` | `ci-tf-dns-technitium-reader` |
+| | | `homelab-ci`'s `terraform-plan/apply-dns-technitium.yml` | `ci-tf-dns-technitium-reader` |
+| | | `homelab-ci`'s `terraform-plan/apply-dns-secrets.yml` | `ci-tf-dns-secrets-technitium-reader` |
 | `/ansible-pve-docker-green` | `ROUTE53_GREEN_ACCESS_KEY_ID`, `ROUTE53_GREEN_SECRET_ACCESS_KEY`, `ROUTE53_GREEN_REGION`, `ROUTE53_GREEN_HOSTED_ZONE_ID`, `DNSWEAVER_TECHNITIUM_TOKEN`, `CEPHFS_CLIENT_KEY` | `ansible-pve-docker-green` (both `traefik-portainer.yml` and `cephfs-mount.yml`) | `ansible-pve-docker-green-reader` |
-| `/shared` | `MINIO_ACCESS_KEY_ID`, `MINIO_SECRET_ACCESS_KEY`, `MINIO_S3_ENDPOINT`, `GITHUB_CONFIG_REPO_TOKEN` | human reference; also read by `homelab-ci`'s `terraform-plan-dns-technitium.yml` via the CLI (MinIO backend creds can't come from the native provider - see below; the GitHub PAT has no such constraint, it's just convenient to fetch alongside them) | `ci-tf-dns-technitium-reader` |
+| `/shared` | `MINIO_ACCESS_KEY_ID`, `MINIO_SECRET_ACCESS_KEY`, `MINIO_S3_ENDPOINT`, `GITHUB_CONFIG_REPO_TOKEN` | human reference; also read by every `homelab-ci` CI identity via the CLI (MinIO backend creds can't come from the native provider - see below; the GitHub PAT has no such constraint, it's just convenient to fetch alongside them) | `ci-tf-dns-technitium-reader`, `ci-tf-dns-secrets-technitium-reader` |
 
 Reserved, currently-empty folders (created up front per the one-folder-per-consumer convention, populate
 as each module accumulates real secrets): `/ansible-pve-secrets`, `/pkr-pve-templates`,
