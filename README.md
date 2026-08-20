@@ -101,7 +101,7 @@ cd pkr-pve-templates
 packer init .
 packer build -only='null.ubuntu_template' -var-file=noble.pkrvars.hcl .      # Ubuntu 24.04 LTS -> vmids 924041/924042/924043
 packer build -only='null.ubuntu_template' -var-file=resolute.pkrvars.hcl .   # Ubuntu 26.04     -> vmids 926041/926042/926043
-packer build -only='null.talos_template'  -var-file=talos.pkrvars.hcl .      # Talos v1.13.9    -> vmids 913041/913042/913043
+packer build -only='null.talos_template'  -var-file=talos.pkrvars.hcl .      # Talos v1.13.9    -> vmids 911391/911392/911393
 ```
 
 **`-only` is required, not cosmetic.** `ubuntu_codename`/`ubuntu_version`/`talos_version`/`talos_schematic_id` all carry defaults (see below) specifically so a single-flavor `-var-file` still validates, but without `-only` scoping which *build* actually runs, `packer build` runs every source in the combined directory - a Talos-only invocation would silently also rebuild the real Ubuntu templates using whatever defaults happen to be set, and vice versa. Confirmed live: an unscoped `packer build -var-file=talos.pkrvars.hcl .` run from an environment without nested virtualization triggered both, and the Ubuntu one failed (safely, at the `virt-customize` stage, before touching any real PVE node - but still not what was intended).

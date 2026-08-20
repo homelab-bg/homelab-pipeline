@@ -4,11 +4,14 @@ talos_schematic_id = "ce4c980550dd2ab1b17bbf2b08801c7eb59418eafe8f279833297925d6
 template_name = "talos-1.13.9"
 bios          = "ovmf"
 
-# vmid pattern mirrors noble.pkrvars.hcl/resolute.pkrvars.hcl (924xxx/926xxx
-# encode Ubuntu 24.04/26.04) - 913xxx encodes Talos 1.13, deliberately a
-# distinct block so it doesn't read as another Ubuntu version.
+# Same <9 prefix><version digits><node index> pattern as
+# noble.pkrvars.hcl/resolute.pkrvars.hcl (924041/926041 = 9 + 2404/2604 + 1) -
+# 1139 encodes Talos 1.13.9 (the exact patch version, not just major.minor,
+# since Talos's own version matrix is 1.7, 1.8 ... 1.13 rather than
+# Ubuntu-style LTS pairs, so the patch digit is what actually distinguishes
+# a rebuild).
 targets = [
-  { pve_node = "pve1", vmid = 913041 },
-  { pve_node = "pve2", vmid = 913042 },
-  { pve_node = "pve3", vmid = 913043 },
+  { pve_node = "pve1", vmid = 911391 },
+  { pve_node = "pve2", vmid = 911392 },
+  { pve_node = "pve3", vmid = 911393 },
 ]
