@@ -2,7 +2,7 @@
 # Copy to extra-vars.yml and fill in real values - extra-vars.yml is gitignored.
 # Run with: ansible-playbook -i hosts.yml deploy.yml -e @extra-vars.yml
 
-docker_infisical_version: 2026.08.6
+docker_infisical_version: 2026.08.7
 
 secrets_domain: secrets.lan.example.internal
 
@@ -29,3 +29,7 @@ route53_secrets_secret_access_key: changeme
 route53_secrets_region: us-east-1
 # Optional - skips an automatic by-name zone lookup.
 route53_secrets_hosted_zone_id: ""
+
+# Required for self-hosted PAM Gateways/Relays on a private LAN (no public
+# IP) - see docker-infisical/README.md. Defaults to false (off) if omitted.
+allow_internal_ip_connections: "false"
