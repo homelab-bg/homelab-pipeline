@@ -2,7 +2,7 @@
 # Copy to extra-vars.yml and fill in real values - extra-vars.yml is gitignored.
 # Run with: ansible-playbook -i hosts.yml deploy.yml -e @extra-vars.yml
 
-docker_infisical_version: 2026.08.7
+docker_infisical_version: 2026.08.8
 
 secrets_domain: secrets.lan.example.internal
 
@@ -33,3 +33,13 @@ route53_secrets_hosted_zone_id: ""
 # Required for self-hosted PAM Gateways/Relays on a private LAN (no public
 # IP) - see docker-infisical/README.md. Defaults to false (off) if omitted.
 allow_internal_ip_connections: "false"
+
+# PAM Relay enrollment - deliberately NOT set here as a permanent value.
+# relay_enrollment_token is single-use and expires ~1h after being generated
+# in the UI, so only pass these two via -e on the one run that actually
+# enrolls the relay for the first time (e.g.
+# `-e relay_enrollment_token=... -e relay_name=...` alongside
+# `-e @extra-vars.yml`) - every run after that reuses the relay's already-
+# stored credentials and doesn't need them at all.
+#relay_enrollment_token: changeme
+#relay_name: changeme
