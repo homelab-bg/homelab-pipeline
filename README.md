@@ -3,7 +3,8 @@
 Packer + Terraform + Ansible pipeline for a Proxmox VE homelab cluster (`pve1`/`pve2`/`pve3`).
 
 ```
-pkr-pve-templates/         Packer: builds golden Ubuntu cloud-init templates, deploys them to every PVE node
+pkr-pve-templates/         Packer: builds golden Ubuntu cloud-init and Talos templates, deploys them to
+                             every PVE node
 tf-pve-packer/              Terraform: provisions the "packer-builder" VM used to run the above
 tf-pve-template-smoketest/  Terraform: single-VM smoke test, clones a template via DHCP
 tf-pve-ceph/                Terraform: CephFS (MDS + filesystem) on the PVE cluster itself - own state,
@@ -98,15 +99,20 @@ Downloads an Ubuntu cloud image, customizes it offline (`qemu-guest-agent`, mach
 ```sh
 cd pkr-pve-templates
 packer init .
-packer build -var-file=noble.pkrvars.hcl .      # Ubuntu 24.04 LTS -> vmids 924041/924042/924043
-packer build -var-file=resolute.pkrvars.hcl .   # Ubuntu 26.04     -> vmids 926041/926042/926043
+packer build -only='null.ubuntu_template' -var-file=noble.pkrvars.hcl .      # Ubuntu 24.04 LTS -> vmids 924041/924042/924043
+packer build -only='null.ubuntu_template' -var-file=resolute.pkrvars.hcl .   # Ubuntu 26.04     -> vmids 926041/926042/926043
+packer build -only='null.talos_template'  -var-file=talos.pkrvars.hcl .      # Talos v1.13.9    -> vmids 913041/913042/913043
 ```
 
-`local.auto.pkrvars.hcl` (auto-loaded, gitignored) supplies just `lan_domain` — everything else (codename, version, template name, per-node `targets`) is versioned in `noble.pkrvars.hcl` / `resolute.pkrvars.hcl` since it carries no internal domain/network info.
+**`-only` is required, not cosmetic.** `ubuntu_codename`/`ubuntu_version`/`talos_version`/`talos_schematic_id` all carry defaults (see below) specifically so a single-flavor `-var-file` still validates, but without `-only` scoping which *build* actually runs, `packer build` runs every source in the combined directory - a Talos-only invocation would silently also rebuild the real Ubuntu templates using whatever defaults happen to be set, and vice versa. Confirmed live: an unscoped `packer build -var-file=talos.pkrvars.hcl .` run from an environment without nested virtualization triggered both, and the Ubuntu one failed (safely, at the `virt-customize` stage, before touching any real PVE node - but still not what was intended).
+
+`local.auto.pkrvars.hcl` (auto-loaded, gitignored) supplies just `lan_domain` — everything else (codename, version, template name, per-node `targets`) is versioned in `noble.pkrvars.hcl` / `resolute.pkrvars.hcl` / `talos.pkrvars.hcl` since it carries no internal domain/network info.
 
 Each node is independent — one node failing (SSH/scp error, `qm` refusing to touch a non-template VM at that vmid) doesn't stop the others; failures are summarized at the end and the build exits non-zero if any node failed.
 
 If you build the `resolute` (26.04) template, note the `tf-pve-*` modules' `node_templates` variable still defaults to the `924041`/`924042`/`924043` (`noble`) vmids — override it via tfvars if you want new clones to come from the 26.04 template instead.
+
+**The Talos build is structurally different**, not just a third flavor of the same thing: no `virt-customize` step (`qemu-guest-agent` is baked in via a pinned [Image Factory](https://factory.talos.dev) schematic instead - see `talos-variables.pkr.hcl` for how that schematic ID was derived), no cloud-init drive (Talos has no SSH/user-account surface at all - config is applied post-boot via `talosctl apply-config`, not cloud-init), and a couple of hardware settings Talos's own docs call out as required (`cache=writethrough` on the disk import, ballooning explicitly disabled) that the Ubuntu build doesn't need. `ubuntu_codename`/`ubuntu_version`/`talos_version`/`talos_schematic_id` all carry defaults matching their current pinned value specifically so a single-flavor `-var-file` still validates cleanly - Packer checks every declared variable across the whole directory regardless of `-only`/`-var-file` scoping, so an unset variable belonging to a different flavor would otherwise block *every* build, not just its own. No `tf-pve-*` module consumes the Talos template yet - that arrives with the future k8s cluster work.
 
 ---
 

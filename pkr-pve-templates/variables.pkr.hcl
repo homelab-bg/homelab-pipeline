@@ -19,12 +19,14 @@ variable "template_name" {
 # Image source
 variable "ubuntu_codename" {
   type        = string
-  description = "Matches the path on cloud-images.ubuntu.com - e.g. resolute (26.04), noble (24.04)"
+  default     = "noble"
+  description = "Matches the path on cloud-images.ubuntu.com - e.g. resolute (26.04), noble (24.04). Defaulted to the current primary flavor (see talos_version's description for why - Packer validates every declared variable across the whole directory regardless of -var-file/-only scoping, so an unset variable here would also block running the Talos build). Override via noble.pkrvars.hcl/resolute.pkrvars.hcl as before."
 }
 
 variable "ubuntu_version" {
   type        = string
-  description = "e.g. 26.04"
+  default     = "24.04"
+  description = "e.g. 26.04. See ubuntu_codename for why this has a default now."
 }
 
 # Hardware
