@@ -5,9 +5,16 @@
 # cloud-init - there's no SSH/user-account surface on a Talos node at all),
 # and a couple of hardware settings Talos's own docs call out as required
 # (disk cache=writethrough, ballooning explicitly disabled) that the Ubuntu
-# build doesn't need. Same per-target idempotency/failure-isolation pattern
-# as build.pkr.hcl's deploy_blocks otherwise - see that file's comment for
-# the full reasoning, not repeated here.
+# build doesn't need. Also, unlike Ubuntu, Talos's binaries hard-require
+# x86-64-v2 microarchitecture support - Proxmox's default kvm64 CPU type
+# doesn't expose it, which produces an immediate, deterministic boot loop
+# ("This program can only be run on AMD64 processors with v2
+# microarchitecture support" -> kernel panic on PID 1 exit, confirmed live
+# via serial console). --cpu host (see build.pkr.hcl's comment for why it's
+# safe cluster-wide) exceeds v2 comfortably and matches the Ubuntu build for
+# uniformity. Same per-target idempotency/failure-isolation pattern as
+# build.pkr.hcl's deploy_blocks otherwise - see that file's comment for the
+# full reasoning, not repeated here.
 locals {
   talos_image_file  = "talos-${var.talos_version}-nocloud-amd64.qcow2"
   talos_image_url   = "https://factory.talos.dev/image/${var.talos_schematic_id}/${var.talos_version}/nocloud-amd64.qcow2"
@@ -26,7 +33,7 @@ locals {
              exit 1
            fi
          fi &&
-         qm create ${t.vmid} --name ${var.template_name} --memory 2048 --balloon 0 --net0 virtio,bridge=${var.bridge} --scsihw virtio-scsi-pci --machine q35 &&
+         qm create ${t.vmid} --name ${var.template_name} --memory 2048 --balloon 0 --cpu host --net0 virtio,bridge=${var.bridge} --scsihw virtio-scsi-pci --machine q35 &&
          qm set ${t.vmid} --virtio0 ${var.storage_pool}:0,import-from=/var/lib/vz/template/iso/${local.talos_image_file},cache=writethrough &&
          qm set ${t.vmid} --boot order=virtio0 &&
          qm set ${t.vmid} --serial0 socket --vga serial0 &&

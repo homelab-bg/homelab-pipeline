@@ -15,6 +15,14 @@ locals {
   # destroy` itself refuses when linked clones exist, which — since it runs
   # inside the same `&&` chain — naturally fails just that node rather than
   # silently orphaning the clone.
+  #
+  # --cpu host is explicit (previously unset here, silently defaulting to
+  # Proxmox's kvm64 - only discovered as a gap while debugging why the Talos
+  # template boot-looped, since Talos hard-requires x86-64-v2 and kvm64
+  # doesn't expose it). host is safe cluster-wide because pve1/pve2/pve3 are
+  # confirmed identical hardware (Intel i5-8500T, verified live via lscpu on
+  # all three) - no live-migration portability risk from pinning to the
+  # physical CPU's exact feature set.
   deploy_blocks = [for t in var.targets : <<-EOT
     echo "=== Deploying to ${t.pve_node} (${t.pve_node}.${var.lan_domain}), vmid ${t.vmid} ==="
     if scp ${local.ssh_opts} ${local.local_image} root@${t.pve_node}.${var.lan_domain}:/var/lib/vz/template/iso/${local.image_file} && \
@@ -28,7 +36,7 @@ locals {
              exit 1
            fi
          fi &&
-         qm create ${t.vmid} --name ${var.template_name} --memory 2048 --net0 virtio,bridge=${var.bridge} --scsihw virtio-scsi-pci --machine q35 &&
+         qm create ${t.vmid} --name ${var.template_name} --memory 2048 --cpu host --net0 virtio,bridge=${var.bridge} --scsihw virtio-scsi-pci --machine q35 &&
          qm set ${t.vmid} --virtio0 ${var.storage_pool}:0,import-from=/var/lib/vz/template/iso/${local.image_file} &&
          qm set ${t.vmid} --ide2 ${var.storage_pool}:cloudinit &&
          qm set ${t.vmid} --boot order=virtio0 &&
