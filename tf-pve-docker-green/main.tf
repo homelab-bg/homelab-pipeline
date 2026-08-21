@@ -28,6 +28,7 @@ resource "proxmox_virtual_environment_vm" "docker" {
   cpu {
     sockets = var.vm.sockets
     cores   = var.vm.cores
+    type    = "host" # explicit, not left to the provider default (qemu64, confirmed via provider binary strings) - pve1/pve2/pve3 are identical hardware (Intel i5-8500T), so host carries no migration risk; see pkr-pve-templates/build.pkr.hcl for the same reasoning at the template-build level
   }
 
   memory {
