@@ -1,0 +1,36 @@
+---
+- name: Install Packer, libguestfs, and their supporting packages on packer-builder
+  hosts: packer_builder
+  become: true
+  tasks:
+    - name: Check whether HashiCorp's GPG key is already present
+      ansible.builtin.stat:
+        path: /usr/share/keyrings/hashicorp-archive-keyring.gpg
+      register: hashicorp_keyring
+
+    # HashiCorp's /gpg endpoint returns an ASCII-armored key, but apt here
+    # expects the dearmored binary form (confirmed live via `file` +
+    # byte-for-byte `cmp` against the existing keyring) - unlike
+    # docker-dependencies.yml's key, which apt reads armored directly.
+    # Fetching straight to the keyring path with get_url would silently
+    # write the wrong format on every run.
+    - name: Fetch and dearmor HashiCorp's GPG key
+      ansible.builtin.shell: curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+      when: not hashicorp_keyring.stat.exists
+      changed_when: true
+
+    - name: Add HashiCorp's APT repository
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com {{ ansible_distribution_release }} main"
+        state: present
+        filename: 'hashicorp'
+
+    - name: Install Packer and virt-customize's runtime dependencies
+      ansible.builtin.apt:
+        name:
+          - packer
+          - libguestfs-tools # provides virt-customize
+          - passt # modern (libguestfs 1.52+) user-mode network backend virt-customize needs - see packer-host-setup.yml for the AppArmor/sysctl fixes it also requires
+          - dhcpcd-base # must be present on the host filesystem for supermin to copy into its appliance - see packer-host-setup.yml
+        state: present
+        update_cache: true

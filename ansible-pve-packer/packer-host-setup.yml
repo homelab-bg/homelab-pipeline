@@ -1,0 +1,103 @@
+---
+- name: Apply host-level fixes required for virt-customize/supermin to work
+  hosts: packer_builder
+  become: true
+  vars:
+    # Both names loop together throughout this playbook - which one(s) exist
+    # varies by host, and handoff notes from the original manual setup are
+    # explicit not to hardcode just one.
+    passt_apparmor_profiles:
+      - passt
+      - usr.bin.passt
+  tasks:
+    # Supermin needs to read the running kernel to build its appliance. Only
+    # covers the currently-running kernel - a kernel upgrade + reboot needs
+    # this task re-run against the new vmlinuz-*.
+    - name: Make the running kernel image world-readable
+      ansible.builtin.file:
+        path: "/boot/vmlinuz-{{ ansible_kernel }}"
+        mode: '0644'
+
+    # KVM acceleration without running as root. Only takes effect on a fresh
+    # login, hence the reset_connection below - doesn't affect an
+    # already-open session.
+    - name: Determine the SSH login user
+      ansible.builtin.command: whoami
+      changed_when: false
+      become: false
+      register: whoami
+
+    - name: Add the login user to the 'kvm' group
+      ansible.builtin.user:
+        name: "{{ whoami.stdout }}"
+        groups: kvm
+        append: true
+
+    - name: Reset SSH connection to refresh user groups
+      ansible.builtin.meta: reset_connection
+
+    # passt's shipped AppArmor profile denies mknod on the randomized temp
+    # paths libguestfs/passt use for sockets/PID files - only visible via
+    # `journalctl -k`, not plain dmesg. Confirmed live: re-running
+    # `apparmor_parser -R` on an already-disabled profile exits non-zero
+    # ("Profile doesn't exist"), so this has to check first rather than run
+    # unconditionally. Uses apparmor_parser -R directly rather than
+    # aa-complain/apparmor-utils, which trips an unrelated parser error on a
+    # different, pre-existing broken profile elsewhere on this host when it
+    # tries to reload everything.
+    - name: Check which AppArmor passt profiles exist
+      ansible.builtin.stat:
+        path: "/etc/apparmor.d/{{ item }}"
+      loop: "{{ passt_apparmor_profiles }}"
+      register: passt_profile_stats
+
+    - name: Check which passt AppArmor profiles are already disabled
+      ansible.builtin.stat:
+        path: "/etc/apparmor.d/disable/{{ item }}"
+      loop: "{{ passt_apparmor_profiles }}"
+      register: passt_disabled_stats
+
+    - name: Disable passt AppArmor profiles not yet disabled
+      ansible.builtin.command: "apparmor_parser -R /etc/apparmor.d/{{ item.0 }}"
+      loop: "{{ passt_apparmor_profiles | zip(passt_profile_stats.results, passt_disabled_stats.results) | list }}"
+      when: item.1.stat.exists and not item.2.stat.exists
+      changed_when: true
+
+    - name: Symlink disabled passt AppArmor profiles into disable/
+      ansible.builtin.file:
+        src: "/etc/apparmor.d/{{ item.0 }}"
+        dest: "/etc/apparmor.d/disable/{{ item.0 }}"
+        state: link
+      loop: "{{ passt_apparmor_profiles | zip(passt_profile_stats.results, passt_disabled_stats.results) | list }}"
+      when: item.1.stat.exists
+
+    # Ubuntu 24.04+ hardening default blocks unprivileged unshare(), which
+    # passt needs for its own sandboxing once its AppArmor profile is
+    # removed (unconfined processes are exactly what this restriction
+    # targets).
+    - name: Disable kernel.apparmor_restrict_unprivileged_userns
+      ansible.posix.sysctl:
+        name: kernel.apparmor_restrict_unprivileged_userns
+        value: '0'
+        sysctl_file: /etc/sysctl.d/60-apparmor-namespace.conf
+        state: present
+        reload: true
+
+    # Supermin's automatic host-package-dependency scan doesn't reliably
+    # pull dhcpcd-base into the built appliance even when it's installed on
+    # the host (open upstream gap, Debian bug #1111785). Without it:
+    # `dhcpcd: command not found` inside the appliance, and since the
+    # appliance's DHCP flow also writes resolv.conf, name resolution fails
+    # too. This edits a file owned by libguestfs-tools, so it's the fix most
+    # likely to silently regress on a package upgrade - worth a periodic
+    # check, not a one-time assumption.
+    - name: Add dhcpcd-base to supermin's appliance package list
+      ansible.builtin.lineinfile:
+        path: /usr/lib/x86_64-linux-gnu/guestfs/supermin.d/packages
+        line: dhcpcd-base
+      register: supermin_packages
+
+    - name: Invalidate any cached appliance built before the dhcpcd-base fix
+      ansible.builtin.shell: rm -rf /var/tmp/.guestfs-*
+      when: supermin_packages is changed
+      changed_when: true

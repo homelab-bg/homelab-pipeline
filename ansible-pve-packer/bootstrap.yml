@@ -1,0 +1,5 @@
+---
+- name: Install Packer and its build dependencies
+  import_playbook: packer-dependencies.yml
+- name: Apply host-level fixes required for virt-customize/supermin to work
+  import_playbook: packer-host-setup.yml
