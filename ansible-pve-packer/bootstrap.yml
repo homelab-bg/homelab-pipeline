@@ -3,3 +3,5 @@
   import_playbook: packer-dependencies.yml
 - name: Apply host-level fixes required for virt-customize/supermin to work
   import_playbook: packer-host-setup.yml
+- name: Install and register the GitHub Actions self-hosted runner
+  import_playbook: github-runner.yml

@@ -1,0 +1,86 @@
+---
+- name: Install and register the GitHub Actions self-hosted runner
+  hosts: packer_builder
+  # Deliberately NOT become: true at play level - GitHub's own actions-runner
+  # setup explicitly warns against running config.sh as root; only the
+  # systemd service install/start steps below need it.
+  vars:
+    github_runner_version: '2.336.0'
+    # actions/runner doesn't publish a checksum in its release notes -
+    # computed locally from the actual downloaded artifact (matches this
+    # project's practice of pinning real hashes, not trusting an unpinned
+    # "latest"). Re-derive via: curl -fsSLO <url> && sha256sum <file>
+    github_runner_sha256: '04cf0be1aff4c3ec3554466c39124ca250e3effd8873bb7e8d68535aa9505d5d'
+    github_runner_dir: "/home/{{ ansible_user_id }}/actions-runner"
+    # Registered against homelab-ci (private), not homelab-pipeline (public) -
+    # matches the existing self-hosted runner's scope, even though this one
+    # builds homelab-pipeline's pkr-pve-templates/. Keeps runner registration
+    # and workflow definitions out of the public repo's attack surface.
+    github_runner_repo: 'homelab-bg/homelab-ci'
+    # Distinct from the existing runner's bare "self-hosted" label - without
+    # this, a Terraform job could land here (no terraform binary installed)
+    # just as easily as a Packer job could land on the LXC runner (no KVM at
+    # all). homelab-ci's existing workflows are updated to target
+    # [self-hosted, terraform] specifically for the same reason.
+    github_runner_labels: 'packer-builder'
+  tasks:
+    - name: Check whether the runner is already configured
+      ansible.builtin.stat:
+        path: "{{ github_runner_dir }}/.runner"
+      register: runner_configured
+
+    - name: Create the runner install directory
+      ansible.builtin.file:
+        path: "{{ github_runner_dir }}"
+        state: directory
+        mode: '0755'
+      when: not runner_configured.stat.exists
+
+    - name: Download the actions-runner package
+      ansible.builtin.get_url:
+        url: "https://github.com/actions/runner/releases/download/v{{ github_runner_version }}/actions-runner-linux-x64-{{ github_runner_version }}.tar.gz"
+        dest: "{{ github_runner_dir }}/actions-runner.tar.gz"
+        checksum: "sha256:{{ github_runner_sha256 }}"
+        mode: '0644'
+      when: not runner_configured.stat.exists
+
+    - name: Extract the actions-runner package
+      ansible.builtin.unarchive:
+        src: "{{ github_runner_dir }}/actions-runner.tar.gz"
+        dest: "{{ github_runner_dir }}"
+        remote_src: true
+      when: not runner_configured.stat.exists
+
+    # github_runner_registration_token is a short-lived (~1hr) token, not a
+    # persisted secret - generate it fresh via GitHub's UI (repo Settings ->
+    # Actions -> Runners -> New self-hosted runner) or the REST API
+    # (POST /repos/{{ github_runner_repo }}/actions/runners/registration-token,
+    # needs a PAT with admin:repo scope), then pass with
+    # -e github_runner_registration_token=<token>. No default here - same
+    # "required, out-of-band, never committed" pattern as every other
+    # credential in this pipeline.
+    - name: Configure the runner
+      ansible.builtin.command:
+        cmd: >
+          ./config.sh --url https://github.com/{{ github_runner_repo }}
+          --token {{ github_runner_registration_token }}
+          --name packer-builder
+          --labels {{ github_runner_labels }}
+          --unattended --replace
+        chdir: "{{ github_runner_dir }}"
+      when: not runner_configured.stat.exists
+      no_log: true # avoid leaking the registration token into play output
+
+    - name: Install the runner as a systemd service
+      ansible.builtin.command:
+        cmd: "./svc.sh install {{ ansible_user_id }}"
+        chdir: "{{ github_runner_dir }}"
+      become: true
+      when: not runner_configured.stat.exists
+
+    - name: Start and enable the runner service
+      ansible.builtin.command:
+        cmd: ./svc.sh start
+        chdir: "{{ github_runner_dir }}"
+      become: true
+      when: not runner_configured.stat.exists
