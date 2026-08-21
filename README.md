@@ -88,7 +88,23 @@ terraform apply tfplan
 
 `local.auto.tfvars` must supply: `lan_domain`, `searchdomain`, `nameservers`, `gateway`, `ipaddr_network`, `authorized_github_users`. The VM gets a static IP at `<ipaddr_network>.112/<cidr>` (default `cidr = 24`).
 
-Destroy with `terraform destroy` when you no longer need a dedicated build host.
+No longer a throwaway build host - since it also runs a self-hosted GitHub Actions runner (see `ansible-pve-packer` below), `packer-builder` is now persistent infrastructure, not something to `terraform destroy` after a one-off build.
+
+---
+
+## `ansible-pve-packer`
+
+Configures `packer-builder` (provisioned by `tf-pve-packer` above) as an actual build host: installs Packer, libguestfs-tools, and the Infisical CLI; applies six host-level fixes `virt-customize`/supermin need that no package install captures (kernel readability, `kvm` group membership, passt's AppArmor profile, a sysctl, a supermin appliance package-list patch - see `packer-host-setup.yml`'s comments for the why behind each one, discovered the hard way on the original manual setup); and installs/registers a second self-hosted GitHub Actions runner against `homelab-ci`, labeled `packer-builder` (see `homelab-ci`'s README for why a second, distinctly-labeled runner exists).
+
+```sh
+cd ansible-pve-packer
+ansible-galaxy collection install -r requirements.yml
+ansible-playbook -i hosts.yml bootstrap.yml --ask-become-pass -e github_runner_registration_token=<token>
+```
+
+`hosts.yml` needs a `packer_builder` group with `packer-builder`'s IP. `github_runner_registration_token` is short-lived (~1hr, generate via `homelab-ci`'s Settings → Actions → Runners → New self-hosted runner, or the REST API) - not a stored secret, and safe to omit on a re-run once the runner's already registered (every step here is idempotent, confirmed live against the real host, including a real bug caught in the process: an `apt_repository` task collided with a keyring HashiCorp's key already had installed at a different path, and a naive `get_url` fetch of a GPG key would have silently written the wrong - armored vs. dearmored - format).
+
+**Kernel readability specifically can't be treated as one-time.** `virt-customize`/supermin don't necessarily use the currently-running kernel - they pick whichever `vmlinuz-*` file looks newest in `/boot`. A kernel package landing via `unattended-upgrades` (no reboot needed to trigger this) can silently reintroduce the exact failure this fixes, which is exactly what broke the first real CI-triggered Ubuntu rebuild. `packer-build-templates.yml` (in `homelab-ci`) re-applies the same chmod on every invocation as a result, not just this playbook - see that repo's README.
 
 ---
 
