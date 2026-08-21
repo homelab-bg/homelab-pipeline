@@ -14,6 +14,11 @@ locals {
   # locally in step 1 below and written to description_file, which gets
   # uploaded alongside the image and read back with a remote `cat` rather
   # than threaded through the single-quoted SSH block in deploy_blocks.
+  # `sha256=<hash>`, not `sha256:<hash>` - confirmed live that Proxmox
+  # percent-encodes a literal `:` in a description (stored/read back as
+  # `sha256%3A...`), which silently broke packer-build-templates.yml's
+  # (homelab-ci) grep for the marker on its very first real run. `=` passes
+  # through unencoded, confirmed the same way.
   build_date        = formatdate("YYYY-MM-DD", timestamp())
   description_file  = "${var.ubuntu_codename}-description.txt"
   local_description = "${var.local_staging_dir}/${local.description_file}"
@@ -85,7 +90,7 @@ build {
       mkdir -p ${var.local_staging_dir}
       wget -q -O ${local.local_image} ${local.image_url}
       image_sha=$(sha256sum ${local.local_image} | cut -c1-12)
-      printf 'Ubuntu ${var.ubuntu_version} (${var.ubuntu_codename}) cloud image - sha256:%s - built ${local.build_date} via pkr-pve-templates/build.pkr.hcl\n' "$image_sha" > ${local.local_description}
+      printf 'Ubuntu ${var.ubuntu_version} (${var.ubuntu_codename}) cloud image - sha256=%s - built ${local.build_date} via pkr-pve-templates/build.pkr.hcl\n' "$image_sha" > ${local.local_description}
     EOT
     ]
   }

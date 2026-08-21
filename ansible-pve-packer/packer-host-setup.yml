@@ -116,3 +116,22 @@
       ansible.builtin.shell: rm -rf /var/tmp/.guestfs-*
       when: supermin_packages is changed
       changed_when: true
+
+    # Confirmed live: unattended-upgrades patched curl/libcurl mid-job, and
+    # needrestart (invoked non-interactively by the apt hook) auto-restarted
+    # the GitHub Actions runner service because it links against libcurl -
+    # killing the in-flight job (GitHub reports this as "canceled", with no
+    # useful error - had to be root-caused from the host's own journal/apt
+    # logs, not anything in the workflow's output). This still patches
+    # packages automatically; it just stops needrestart from yanking this
+    # one service. A single-key assignment into needrestart's existing
+    # override_rc hash, not a full reassignment - the main
+    # /etc/needrestart/needrestart.conf already populates that hash with its
+    # own defaults (docker, libvirt, etc.), and reassigning the whole hash
+    # here would silently clobber all of those.
+    - name: Don't let needrestart auto-restart the GitHub Actions runner service
+      ansible.builtin.copy:
+        dest: /etc/needrestart/conf.d/packer-builder-runner.conf
+        content: |
+          $nrconf{override_rc}{qr(^actions\.runner)} = 0;
+        mode: '0644'
