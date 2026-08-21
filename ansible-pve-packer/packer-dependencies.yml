@@ -25,12 +25,37 @@
         state: present
         filename: 'hashicorp'
 
-    - name: Install Packer and virt-customize's runtime dependencies
+    - name: Check whether Infisical's GPG key is already present
+      ansible.builtin.stat:
+        path: /usr/share/keyrings/infisical-archive-keyring.gpg
+      register: infisical_keyring
+
+    # Same armored-key situation as HashiCorp's above (confirmed against the
+    # existing homelab-ci LXC runner, which already has the CLI installed
+    # this way) - needed because packer-build-templates.yml's Infisical
+    # login step runs on this host, same as it does on that runner. Missed
+    # in the original pass (this playbook was written for Packer/libguestfs
+    # concerns only, before the CI workflow that also needs this existed) -
+    # confirmed live via the workflow's first real run failing with
+    # "infisical: command not found".
+    - name: Fetch and dearmor Infisical's GPG key
+      ansible.builtin.shell: curl -fsSL https://artifacts-cli.infisical.com/infisical.gpg | gpg --dearmor -o /usr/share/keyrings/infisical-archive-keyring.gpg
+      when: not infisical_keyring.stat.exists
+      changed_when: true
+
+    - name: Add Infisical's APT repository
+      ansible.builtin.apt_repository:
+        repo: "deb [arch=amd64 signed-by=/usr/share/keyrings/infisical-archive-keyring.gpg] https://artifacts-cli.infisical.com/deb stable main"
+        state: present
+        filename: 'infisical'
+
+    - name: Install Packer, virt-customize's runtime dependencies, and the Infisical CLI
       ansible.builtin.apt:
         name:
           - packer
           - libguestfs-tools # provides virt-customize
           - passt # modern (libguestfs 1.52+) user-mode network backend virt-customize needs - see packer-host-setup.yml for the AppArmor/sysctl fixes it also requires
           - dhcpcd-base # must be present on the host filesystem for supermin to copy into its appliance - see packer-host-setup.yml
+          - infisical # needed by packer-build-templates.yml's Infisical login step
         state: present
         update_cache: true
