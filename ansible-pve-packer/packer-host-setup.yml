@@ -10,13 +10,28 @@
       - passt
       - usr.bin.passt
   tasks:
-    # Supermin needs to read the running kernel to build its appliance. Only
-    # covers the currently-running kernel - a kernel upgrade + reboot needs
-    # this task re-run against the new vmlinuz-*.
-    - name: Make the running kernel image world-readable
+    # Supermin needs to read a kernel image to build its appliance - but it
+    # doesn't necessarily pick the currently-running one. Confirmed live: a
+    # newer kernel (installed by unattended-upgrades, no reboot yet) sat at
+    # its default 0600 while the running kernel's vmlinuz was still 0644
+    # from an earlier run of this task, and supermin picked the newer
+    # (unreadable) one anyway, breaking every Ubuntu build until this was
+    # widened. Covers every vmlinuz-* present in /boot, not just
+    # ansible_kernel, for exactly that reason - also mirrored as a
+    # self-healing step directly in packer-build-templates.yml, since a
+    # kernel update can land silently between one run of this playbook and
+    # the next CI trigger.
+    - name: Find all kernel images in /boot
+      ansible.builtin.find:
+        paths: /boot
+        patterns: 'vmlinuz-*'
+      register: boot_kernels
+
+    - name: Make all kernel images world-readable
       ansible.builtin.file:
-        path: "/boot/vmlinuz-{{ ansible_kernel }}"
+        path: "{{ item.path }}"
         mode: '0644'
+      loop: "{{ boot_kernels.files }}"
 
     # KVM acceleration without running as root. Only takes effect on a fresh
     # login, hence the reset_connection below - doesn't affect an
