@@ -4,6 +4,20 @@ locals {
   local_image = "${var.local_staging_dir}/${local.image_file}"
   ssh_opts    = "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -o BatchMode=yes"
 
+  # Provenance stamp for the template's Proxmox description/tags (see
+  # talos.pkrvars.hcl's targets comment for why this exists - the
+  # codename/version alone don't tell you whether a rebuild actually pulled
+  # in a newer upstream image, since cloud-images.ubuntu.com's "release/"
+  # path always points at whatever build is currently latest, with no
+  # serial in the URL itself). build_date is HCL-computable, but the image's
+  # own sha256 can only exist after it's actually downloaded - computed
+  # locally in step 1 below and written to description_file, which gets
+  # uploaded alongside the image and read back with a remote `cat` rather
+  # than threaded through the single-quoted SSH block in deploy_blocks.
+  build_date        = formatdate("YYYY-MM-DD", timestamp())
+  description_file  = "${var.ubuntu_codename}-description.txt"
+  local_description = "${var.local_staging_dir}/${local.description_file}"
+
   # One deploy block per target, unrolled at plan time. Each is independent —
   # a failure on one node doesn't stop the others, and failures are collected
   # into $FAILED_NODES for the final pass/fail check.
@@ -26,6 +40,7 @@ locals {
   deploy_blocks = [for t in var.targets : <<-EOT
     echo "=== Deploying to ${t.pve_node} (${t.pve_node}.${var.lan_domain}), vmid ${t.vmid} ==="
     if scp ${local.ssh_opts} ${local.local_image} root@${t.pve_node}.${var.lan_domain}:/var/lib/vz/template/iso/${local.image_file} && \
+       scp ${local.ssh_opts} ${local.local_description} root@${t.pve_node}.${var.lan_domain}:/var/lib/vz/template/iso/${local.description_file} && \
        ssh ${local.ssh_opts} root@${t.pve_node}.${var.lan_domain} '
          if qm status ${t.vmid} >/dev/null 2>&1; then
            if qm config ${t.vmid} | grep -q "^template: 1"; then
@@ -43,6 +58,8 @@ locals {
          qm set ${t.vmid} --serial0 socket --vga serial0 &&
          qm set ${t.vmid} --agent enabled=1 &&
          qm set ${t.vmid} --bios ${var.bios} --efidisk0 ${var.storage_pool}:1,efitype=4m,pre-enrolled-keys=0 &&
+         qm set ${t.vmid} --tags packer,ubuntu,${var.ubuntu_version},built-${local.build_date} &&
+         qm set ${t.vmid} --description "$(cat /var/lib/vz/template/iso/${local.description_file})" &&
          qm template ${t.vmid}
        '; then
       echo "=== ${t.pve_node}: OK ==="
@@ -60,10 +77,16 @@ build {
 
   # 1. Download the official cloud image locally (on the machine running Packer —
   #    deliberately not on the PVE node, matching the advice to keep libguestfs off PVE hosts).
+  #    Also computes the provenance description file (see locals.description_file) -
+  #    done here, in a plain local shell, specifically to avoid needing to thread a
+  #    runtime-computed value through deploy_blocks' single-quoted remote SSH script.
   provisioner "shell-local" {
-    inline = [
-      "mkdir -p ${var.local_staging_dir}",
-      "wget -q -O ${local.local_image} ${local.image_url}",
+    inline = [<<-EOT
+      mkdir -p ${var.local_staging_dir}
+      wget -q -O ${local.local_image} ${local.image_url}
+      image_sha=$(sha256sum ${local.local_image} | cut -c1-12)
+      printf 'Ubuntu ${var.ubuntu_version} (${var.ubuntu_codename}) cloud image - sha256:%s - built ${local.build_date} via pkr-pve-templates/build.pkr.hcl\n' "$image_sha" > ${local.local_description}
+    EOT
     ]
   }
 

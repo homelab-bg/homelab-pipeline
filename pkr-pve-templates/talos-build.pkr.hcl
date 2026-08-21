@@ -19,6 +19,11 @@ locals {
   talos_image_file  = "talos-${var.talos_version}-nocloud-amd64.qcow2"
   talos_image_url   = "https://factory.talos.dev/image/${var.talos_schematic_id}/${var.talos_version}/nocloud-amd64.qcow2"
   talos_local_image = "${var.local_staging_dir}/${local.talos_image_file}"
+  # Provenance stamp (see talos.pkrvars.hcl's targets comment) - every value
+  # here is already known at HCL-eval time, no runtime shell computation
+  # needed, unlike build.pkr.hcl's build_sha which can only exist after the
+  # image is actually downloaded.
+  talos_build_date = formatdate("YYYY-MM-DD", timestamp())
 
   talos_deploy_blocks = [for t in var.targets : <<-EOT
     echo "=== Deploying to ${t.pve_node} (${t.pve_node}.${var.lan_domain}), vmid ${t.vmid} ==="
@@ -39,6 +44,8 @@ locals {
          qm set ${t.vmid} --serial0 socket --vga serial0 &&
          qm set ${t.vmid} --agent enabled=1 &&
          qm set ${t.vmid} --bios ${var.bios} --efidisk0 ${var.storage_pool}:1,efitype=4m,pre-enrolled-keys=0 &&
+         qm set ${t.vmid} --tags packer,talos,${var.talos_version},built-${local.talos_build_date} &&
+         qm set ${t.vmid} --description "Talos ${var.talos_version} - schematic ${var.talos_schematic_id} - built ${local.talos_build_date} via pkr-pve-templates/talos-build.pkr.hcl" &&
          qm template ${t.vmid}
        '; then
       echo "=== ${t.pve_node}: OK ==="
