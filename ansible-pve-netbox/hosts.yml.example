@@ -1,0 +1,14 @@
+---
+# Copy to hosts.yml and fill in real values - hosts.yml is gitignored.
+all:
+  children:
+    netbox:
+      hosts:
+        netbox:
+          ansible_host: 192.168.0.17
+  vars:
+    ansible_user: root # root-only SSH, no separate user account - matches the existing secrets LXC
+    ansible_python_interpreter: /usr/bin/python3
+    # No ansible_ssh_private_key_file here on purpose - auth relies on whoever's
+    # running this having a matching key available (ssh-agent, or a `Host 192.168.0.17`
+    # block in ~/.ssh/config), not a path hardcoded into the inventory.

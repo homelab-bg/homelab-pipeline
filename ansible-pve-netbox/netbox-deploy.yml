@@ -1,0 +1,106 @@
+---
+- name: Deploy NetBox on the netbox LXC
+  hosts: netbox
+  vars:
+    stack_dir: "{{ ansible_env.HOME }}/netbox-docker"
+    # Scoped read-only to this playbook's own /ansible-pve-netbox folder via
+    # a dedicated machine identity - same least-privilege-per-consumer
+    # pattern as ansible-pve-docker-green's traefik-portainer.yml (see
+    # homelab-pipeline README).
+    netbox_secrets: "{{ lookup('infisical.vault.read_secrets',
+      universal_auth_client_id=infisical_client_id,
+      universal_auth_client_secret=infisical_client_secret,
+      project_id=infisical_project_id,
+      env_slug='prod',
+      path='/ansible-pve-netbox',
+      as_dict=True,
+      url=infisical_host
+      ) }}"
+
+  tasks:
+    - name: Check whether the stack directory is already a git checkout
+      ansible.builtin.stat:
+        path: "{{ stack_dir }}/.git"
+      register: stack_dir_git
+
+    - name: Remove non-git stack directory before first git-based deploy
+      ansible.builtin.file:
+        path: "{{ stack_dir }}"
+        state: absent
+      when: not stack_dir_git.stat.exists
+
+    # Pinned to a real release tag (confirmed live via the GitHub API, not
+    # guessed), not the `release` branch - a redeploy shouldn't silently
+    # pick up whatever's newest. Bump deliberately when moving forward.
+    - name: Clone/update netbox-docker from GitHub
+      ansible.builtin.git:
+        repo: https://github.com/netbox-community/netbox-docker.git
+        dest: "{{ stack_dir }}"
+        version: "{{ netbox_docker_version | default('5.0.2') }}"
+
+    # The four env files below are real config, committed upstream with
+    # demo placeholder secrets (confirmed live - the same passwords appear
+    # verbatim in netbox-docker's own repo) - not something to copy as-is.
+    # DB_PASSWORD (netbox.env) must exactly match POSTGRES_PASSWORD
+    # (postgres.env); REDIS_PASSWORD (netbox.env) must match redis.env's
+    # own REDIS_PASSWORD; REDIS_CACHE_PASSWORD (netbox.env) must match
+    # redis-cache.env's own REDIS_PASSWORD - redis.env and redis-cache.env
+    # both use the literal key name REDIS_PASSWORD for their own service,
+    # netbox.env just needs both simultaneously so it disambiguates them.
+    - name: Write env/postgres.env
+      ansible.builtin.copy:
+        dest: "{{ stack_dir }}/env/postgres.env"
+        content: |
+          POSTGRES_DB=netbox
+          POSTGRES_USER=netbox
+          POSTGRES_PASSWORD={{ netbox_secrets.NETBOX_DB_PASSWORD }}
+        mode: '0600'
+
+    - name: Write env/redis.env
+      ansible.builtin.copy:
+        dest: "{{ stack_dir }}/env/redis.env"
+        content: |
+          REDIS_PASSWORD={{ netbox_secrets.NETBOX_REDIS_PASSWORD }}
+        mode: '0600'
+
+    - name: Write env/redis-cache.env
+      ansible.builtin.copy:
+        dest: "{{ stack_dir }}/env/redis-cache.env"
+        content: |
+          REDIS_PASSWORD={{ netbox_secrets.NETBOX_REDIS_CACHE_PASSWORD }}
+        mode: '0600'
+
+    # SKIP_SUPERUSER=true (upstream default, kept) - create the admin user
+    # manually post-deploy instead:
+    #   docker compose exec netbox /opt/netbox/netbox/manage.py createsuperuser
+    # avoids one more secret to manage for a one-time bootstrap action.
+    - name: Write env/netbox.env
+      ansible.builtin.copy:
+        dest: "{{ stack_dir }}/env/netbox.env"
+        content: |
+          API_TOKEN_PEPPER_1={{ netbox_secrets.NETBOX_API_TOKEN_PEPPER }}
+          CORS_ORIGIN_ALLOW_ALL=True
+          DB_HOST=postgres
+          DB_NAME=netbox
+          DB_USER=netbox
+          DB_PASSWORD={{ netbox_secrets.NETBOX_DB_PASSWORD }}
+          GRAPHQL_ENABLED=true
+          METRICS_ENABLED=false
+          REDIS_CACHE_DATABASE=1
+          REDIS_CACHE_HOST=redis-cache
+          REDIS_CACHE_PASSWORD={{ netbox_secrets.NETBOX_REDIS_CACHE_PASSWORD }}
+          REDIS_CACHE_SSL=false
+          REDIS_DATABASE=0
+          REDIS_HOST=redis
+          REDIS_PASSWORD={{ netbox_secrets.NETBOX_REDIS_PASSWORD }}
+          REDIS_SSL=false
+          SECRET_KEY={{ netbox_secrets.NETBOX_SECRET_KEY }}
+          SKIP_SUPERUSER=true
+          WEBHOOKS_ENABLED=true
+        mode: '0600'
+
+    - name: Deploy the NetBox stack
+      ansible.builtin.command: docker compose up -d
+      args:
+        chdir: "{{ stack_dir }}"
+      changed_when: true

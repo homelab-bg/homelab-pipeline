@@ -1,0 +1,15 @@
+---
+# Copy to extra-vars.yml and fill in real values - extra-vars.yml is gitignored.
+# Run with: ansible-playbook -i hosts.yml bootstrap.yml --ask-become-pass -e @extra-vars.yml
+
+netbox_docker_version: 5.0.2 # https://github.com/netbox-community/netbox-docker/releases - bump deliberately
+
+# NetBox's own internal app secrets (Django SECRET_KEY, DB/Redis passwords,
+# API token pepper) moved to Infisical (/ansible-pve-netbox folder, "prod"
+# env) - netbox-deploy.yml reads them at deploy time via the
+# infisical.vault.read_secrets lookup, authenticated through this
+# playbook's own scoped machine identity below.
+infisical_host: https://secrets.lan.example.com
+infisical_project_id: changeme
+infisical_client_id: changeme
+infisical_client_secret: changeme

@@ -1,0 +1,16 @@
+# Copy to local.auto.tfvars and fill in real values - local.auto.tfvars is gitignored
+# and auto-loaded by Terraform, this .example file is committed for reference only.
+
+lan_domain   = "lan.example.internal"
+searchdomain = "lan.example.internal"
+nameservers  = ["10.0.0.2", "10.0.0.3", "10.0.0.4"]
+gateway      = "10.0.0.1"
+
+netbox_domain = "ipam.lan.example.internal"
+
+authorized_github_users = ["your-github-username"]
+
+infisical_host           = "https://secrets.lan.example.com"
+infisical_project_id     = "changeme"
+infisical_client_id      = "changeme"
+infisical_client_secret  = "changeme"

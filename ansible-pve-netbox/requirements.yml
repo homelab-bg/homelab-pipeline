@@ -1,0 +1,3 @@
+---
+collections:
+  - name: infisical.vault # provides the read_secrets lookup used by netbox-deploy.yml - also requires `pip install infisicalsdk`

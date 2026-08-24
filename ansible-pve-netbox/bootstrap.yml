@@ -1,0 +1,5 @@
+---
+- name: Install Docker on the netbox LXC
+  import_playbook: docker-dependencies.yml
+- name: Deploy NetBox
+  import_playbook: netbox-deploy.yml
