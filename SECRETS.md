@@ -38,6 +38,50 @@ Verified live: a scoped identity can read its own folder and gets nothing back f
 **Naming convention**: identity `<module>-reader` (or `<module>-<purpose>-reader` if a module has more
 than one), secret keys `UPPER_SNAKE_CASE` matching what they'd be as env vars.
 
+## SOP: adding a new consumer's folder + identity
+
+No CLI support for identity management (folders/secrets, yes - `infisical secrets folders create` /
+`infisical secrets set`; identities, no) - the steps below use the REST API directly. Get the real
+request/response shapes from the instance's own live OpenAPI spec (`GET /api/docs/json`) rather than
+assumed from memory or general Infisical docs - the exact endpoints below were confirmed against it, not
+guessed, and a wrong guess here is exactly what caused the gotcha further down.
+
+1. **Folder** (CLI): `infisical secrets folders create --env=prod --path=/ --name=<module>` (or via the
+   web UI).
+2. **Secrets** (CLI): `infisical secrets set KEY=value ... --env=prod --path=/<module>`.
+3. **Identity, at the org level**: `POST /api/v1/identities` with
+   `{name, organizationId, role: "no-access"}`. Not the project-scoped variant - see the gotcha below.
+4. **Add it to the `homelab-pipeline` project**: `POST /api/v2/workspace/{projectId}/identity-memberships/{identityId}`
+   with `{roles: [{role: "no-access", isTemporary: false}]}`.
+5. **Attach Universal Auth**: `POST /api/v1/auth/universal-auth/identities/{identityId}` with `{}`
+   (defaults are fine) - response includes the `clientId`.
+6. **Generate its client secret**: `POST /api/v1/auth/universal-auth/identities/{identityId}/client-secrets`
+   with `{description}` - the `clientSecret` in the response is shown exactly once, save it immediately.
+7. **Grant the scoped privilege**: `POST /api/v2/identity-project-additional-privilege` with
+   `{identityId, projectId, slug: "<module>-read", type: {isTemporary: false}, permissions: [{subject:
+   "secrets", action: "read", conditions: {environment: "prod", secretPath: "/<module>"}}]}`.
+8. **Verify, not optional**: authenticate as the *new* identity (`infisical login --method=universal-auth
+   --client-id=... --client-secret=...`) and confirm it can read a secret from its own folder, and gets
+   `*not found*` for a secret in a different folder. Cross-check that secret genuinely exists via an
+   admin/broader token first - `*not found*` on a secret that was never there proves nothing about
+   scoping. This is the same claim the "Infisical structure" section above makes generally; re-verify it
+   for every new identity, don't just trust that the framework is working.
+
+### Gotcha: two identity-creation endpoints exist, only one matches this project's pattern
+
+`POST /api/v1/projects/{projectId}/identities` also creates a working, functional identity - secrets
+really are readable through it - but it creates the identity *scoped directly to that project*
+(`projectId` set on the identity itself, `orgId`-listing-invisible), not the org-level-identity-plus-
+separate-membership shape every other identity in this project uses. Confirmed live: an identity created
+this way never appears in `GET /api/v1/identities?orgId=...`, unlike all ten pre-existing identities,
+which do.
+
+Caught in the same session it was written: two identities (`ansible-pve-netbox-reader`,
+`tf-pve-netbox-reader`) were first created via this wrong endpoint - discovered only because the human
+operator noticed they looked structurally different from the existing ones, not because anything
+visibly failed. Deleted and recreated via the steps above; re-verified per step 8 afterward. Use step 3's
+endpoint, not this one.
+
 ## Current inventory
 
 | Folder | Secrets | Consumer(s) | Reader identity |
