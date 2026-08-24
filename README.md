@@ -152,6 +152,30 @@ terraform output test_vm_ipv4   # populates once qemu-guest-agent checks in
 
 ---
 
+## `tf-pve-talos-smoketest`
+
+Single Talos control-plane node (`k8s-smoketest1`, vm_id `100116`, static IP `172.16.0.250`) cloned from the `talos-1.13` template - validates the mechanism a real multi-node k8s cluster module will use, before building that out: static IP delivery via a Proxmox cloud-init snippet (`initialization.user_data_file_id`), not DHCP or `talosctl apply-config`. Talos's `nocloud` platform is modeled directly on cloud-init's NoCloud datasource - it reads its machine config from the same `cidata`-labeled ISO mechanism cloud-init uses, just with Talos's own config YAML as the `user-data` content instead of a cloud-init script.
+
+```sh
+cd tf-pve-talos-smoketest
+terraform init -backend-config=backend.local.hcl
+terraform plan  -out=tfplan
+terraform apply tfplan
+terraform output kubeconfig > /tmp/kubeconfig   # sensitive - not written to disk by the module itself
+kubectl --kubeconfig=/tmp/kubeconfig get nodes
+terraform destroy   # disposable, like tf-pve-template-smoketest - tear down once the mechanism's confirmed
+```
+
+`local.auto.tfvars` must supply: `lan_domain`, `ssh_private_key_path` (root SSH key for the PVE nodes - the `bpg/proxmox` provider's own SSH client, used for `proxmox_virtual_environment_file` snippet uploads since Proxmox's API has no direct upload path for the `snippets` content type, needs this explicitly: it doesn't read `~/.ssh/config` and doesn't reliably pick up `ssh-agent`, confirmed live).
+
+Uses the [`siderolabs/talos`](https://registry.terraform.io/providers/siderolabs/talos) provider (chosen over shelling out to `talosctl gen config`, unlike this project's usual "shell out when the primary provider can't do it" pattern - a purpose-built provider existed here, so used it) to generate machine config, bootstrap the node, and retrieve a kubeconfig - all fully Terraform-native, no external CLI dependency.
+
+**Two real bugs found getting this working, both root-caused from live evidence** (serial console / guest-agent inspection / `isoinfo` against the actual generated ISO), not guessed at:
+- The `terraform-prov@pve` API token needed `Datastore.Allocate` granted on the `nfs` storage - nothing had ever written to it via Terraform before (snippets there were previously populated manually).
+- Setting `machine.network.hostname` directly in the machine config conflicts with Talos's `nocloud` platform's own hostname handling ("static hostname is already set in v1alpha1 config"), which kept the node permanently stuck retrying config acquisition and falling back to DHCP maintenance mode - never actually reaching the intended static IP. Fixed by leaving hostname out of the machine config entirely and delivering it instead via a second snippet (`meta_data_file_id`) containing the standard NoCloud `local-hostname` field, which Talos's nocloud platform reads without conflict.
+
+---
+
 ## `tf-pve-ceph`
 
 Creates MDS daemons (one per `pve_nodes` entry) and a CephFS filesystem on the PVE cluster, via `terraform_data` + `remote-exec` provisioners (SSH as root to the PVE nodes) rather than a Terraform provider resource — as of `bpg/proxmox` `0.111.1` (the latest release), no provider exposes MDS creation, CephFS filesystem creation, or CephX client/auth key management; only `proxmox_ceph_pool` (raw RADOS pools) and the read-only `proxmox_ceph_status` data source exist. Same shape as `pkr-pve-templates/build.pkr.hcl` wrapping `qm` over SSH, for the same reason: the official CLI already does the job, there's no clean provider-native path.

@@ -1,0 +1,6 @@
+# Copy to local.auto.tfvars and fill in real values - local.auto.tfvars is gitignored
+# and auto-loaded by Terraform, this .example file is committed for reference only.
+
+lan_domain = "lan.example.internal"
+
+ssh_private_key_path = "/home/you/.ssh/id_rsa"
