@@ -48,7 +48,9 @@ than one), secret keys `UPPER_SNAKE_CASE` matching what they'd be as env vars.
 | | | `homelab-ci`'s `terraform-plan/apply-dns-technitium.yml` | `ci-tf-dns-technitium-reader` |
 | | | `homelab-ci`'s `terraform-plan/apply-dns-secrets.yml` | `ci-tf-dns-secrets-technitium-reader` |
 | | | `homelab-ci`'s `terraform-plan/apply-pve-docker-green.yml` | `ci-tf-pve-docker-green-technitium-reader` |
+| | | `tf-pve-netbox` | `tf-pve-netbox-reader` |
 | `/ansible-pve-docker-green` | `ROUTE53_GREEN_ACCESS_KEY_ID`, `ROUTE53_GREEN_SECRET_ACCESS_KEY`, `ROUTE53_GREEN_REGION`, `ROUTE53_GREEN_HOSTED_ZONE_ID`, `DNSWEAVER_TECHNITIUM_TOKEN`, `CEPHFS_CLIENT_KEY` | `ansible-pve-docker-green` (both `traefik-portainer.yml` and `cephfs-mount.yml`) | `ansible-pve-docker-green-reader` |
+| `/ansible-pve-netbox` | `NETBOX_SECRET_KEY`, `NETBOX_DB_PASSWORD`, `NETBOX_REDIS_PASSWORD`, `NETBOX_REDIS_CACHE_PASSWORD`, `NETBOX_API_TOKEN_PEPPER` | `ansible-pve-netbox` (`netbox-deploy.yml`) - internal app secrets, not credentials to an external system, same out-of-band-creation rule regardless | `ansible-pve-netbox-reader` |
 | `/shared` | `MINIO_ACCESS_KEY_ID`, `MINIO_SECRET_ACCESS_KEY`, `MINIO_S3_ENDPOINT`, `GITHUB_CONFIG_REPO_TOKEN`, `PROXMOX_VE_API_TOKEN` | human reference; also read by every `homelab-ci` CI identity via the CLI. Only the MinIO backend creds are structurally forced into this path (see below) - `GITHUB_CONFIG_REPO_TOKEN` and `PROXMOX_VE_API_TOKEN` have no such constraint (the latter is read directly by the `proxmox` provider as a plain env var, same as any other provider credential), they're just convenient to fetch alongside the MinIO creds in one CLI call | `ci-tf-dns-technitium-reader`, `ci-tf-dns-secrets-technitium-reader`, `ci-tf-pve-docker-green-technitium-reader`, `ci-tf-pve-template-smoketest-reader`, `ci-tf-pve-packer-reader` |
 
 `ci-tf-pve-template-smoketest-reader` and `ci-tf-pve-packer-reader` are scoped to `/shared` only, not
