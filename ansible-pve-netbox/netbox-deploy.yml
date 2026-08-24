@@ -74,11 +74,19 @@
     # manually post-deploy instead:
     #   docker compose exec netbox /opt/netbox/netbox/manage.py createsuperuser
     # avoids one more secret to manage for a one-time bootstrap action.
+    #
+    # SECRET_KEY/API_TOKEN_PEPPER_1 are single-quoted, matching upstream's
+    # own demo env file exactly - docker compose's env_file parser treats an
+    # unquoted `#` as a comment start, and NetBox's own recommended
+    # generator for these two specifically uses a wide special-character
+    # set that can include one. DB/Redis passwords are generated from a
+    # plain alphanumeric charset instead, sidestepping the issue entirely
+    # rather than needing the same quoting.
     - name: Write env/netbox.env
       ansible.builtin.copy:
         dest: "{{ stack_dir }}/env/netbox.env"
         content: |
-          API_TOKEN_PEPPER_1={{ netbox_secrets.NETBOX_API_TOKEN_PEPPER }}
+          API_TOKEN_PEPPER_1='{{ netbox_secrets.NETBOX_API_TOKEN_PEPPER }}'
           CORS_ORIGIN_ALLOW_ALL=True
           DB_HOST=postgres
           DB_NAME=netbox
@@ -94,7 +102,7 @@
           REDIS_HOST=redis
           REDIS_PASSWORD={{ netbox_secrets.NETBOX_REDIS_PASSWORD }}
           REDIS_SSL=false
-          SECRET_KEY={{ netbox_secrets.NETBOX_SECRET_KEY }}
+          SECRET_KEY='{{ netbox_secrets.NETBOX_SECRET_KEY }}'
           SKIP_SUPERUSER=true
           WEBHOOKS_ENABLED=true
         mode: '0600'
