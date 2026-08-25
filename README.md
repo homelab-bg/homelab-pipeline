@@ -19,6 +19,8 @@ ansible-pve-docker-green/   Ansible: installs Docker, mounts CephFS, deploys Tra
 
 See [`SECRETS.md`](SECRETS.md) for how credentials are organised in Infisical (project/folder/identity structure) and the minimal set of secrets that must survive outside it for disaster recovery.
 
+See [`IPAM.md`](IPAM.md) for how static IP addresses are allocated across the LAN, tracked in NetBox, and the range scheme reserved ahead of the upcoming Kubernetes module.
+
 ## Prerequisites
 
 - Terraform >= 1.9, Packer with the `hashicorp/proxmox` plugin source available (`packer init` handles this), Ansible with the `community.docker` and `ansible.posix` collections (`ansible-galaxy collection install -r requirements.yml` in `ansible-pve-docker-green`)
