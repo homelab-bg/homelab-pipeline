@@ -36,8 +36,8 @@
         dest: "{{ stack_dir }}/secrets/aws_credentials"
         content: |
           [default]
-          aws_access_key_id = {{ route53_secrets_access_key_id }}
-          aws_secret_access_key = {{ route53_secrets_secret_access_key }}
+          aws_access_key_id = {{ route53_bauer_access_key_id }}
+          aws_secret_access_key = {{ route53_bauer_secret_access_key }}
         mode: '0600'
 
     # Infisical's own ENCRYPTION_KEY/AUTH_SECRET/DB creds go through a plain
@@ -56,8 +56,8 @@
           ENCRYPTION_KEY={{ infisical_encryption_key }}
           AUTH_SECRET={{ infisical_auth_secret }}
           SECRETS_HOST={{ secrets_domain }}
-          AWS_REGION={{ route53_secrets_region | default('us-east-1') }}
-          AWS_HOSTED_ZONE_ID={{ route53_secrets_hosted_zone_id | default('') }}
+          AWS_REGION={{ route53_bauer_region | default('us-east-1') }}
+          AWS_HOSTED_ZONE_ID={{ route53_bauer_hosted_zone_id | default('') }}
           DATA_DIR={{ secrets_data_dir }}
           ALLOW_INTERNAL_IP_CONNECTIONS={{ allow_internal_ip_connections | default('false') }}
           {# Enrollment tokens are single-use, but harmless once spent (the

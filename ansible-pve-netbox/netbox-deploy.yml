@@ -17,6 +17,20 @@
       url=infisical_host
       ) }}"
 
+    # Same identity as above, granted an additional scoped-read privilege
+    # on /shared (see SECRETS.md) - Route53 DNS-01 credentials for Caddy's
+    # Let's Encrypt cert, shared with docker-infisical's own Caddy rather
+    # than duplicated per-consumer.
+    shared_secrets: "{{ lookup('infisical.vault.read_secrets',
+      universal_auth_client_id=infisical_client_id,
+      universal_auth_client_secret=infisical_client_secret,
+      project_id=infisical_project_id,
+      env_slug='prod',
+      path='/shared',
+      as_dict=True,
+      url=infisical_host
+      ) }}"
+
   tasks:
     - name: Check whether the stack directory is already a git checkout
       ansible.builtin.stat:
@@ -32,11 +46,24 @@
     # Pinned to a real release tag (confirmed live via the GitHub API, not
     # guessed), not the `release` branch - a redeploy shouldn't silently
     # pick up whatever's newest. Bump deliberately when moving forward.
+    #
+    # force=true, unlike traefik-portainer.yml's equivalent step - confirmed
+    # live this actually matters here: unlike that playbook's secrets/
+    # directory (untracked, outside the repo's tree), NetBox's env files
+    # (env/*.env below) are real *tracked* files in netbox-docker's own
+    # repo, and this playbook overwrites them in place with real secrets.
+    # On any redeploy, git's default force=no sees that as a local
+    # modification and refuses ("Local modifications exist in the
+    # destination"). Safe to force here specifically because the env-file
+    # tasks below always run immediately after, in the same play - any
+    # reset to the pinned tag's demo content gets overwritten with real
+    # secrets again before docker compose ever sees it.
     - name: Clone/update netbox-docker from GitHub
       ansible.builtin.git:
         repo: https://github.com/netbox-community/netbox-docker.git
         dest: "{{ stack_dir }}"
         version: "{{ netbox_docker_version | default('5.0.2') }}"
+        force: true
 
     # The four env files below are real config, committed upstream with
     # demo placeholder secrets (confirmed live - the same passwords appear
@@ -107,8 +134,102 @@
           WEBHOOKS_ENABLED=true
         mode: '0600'
 
+    - name: Ensure secrets directory exists
+      ansible.builtin.file:
+        path: "{{ stack_dir }}/secrets"
+        state: directory
+        mode: '0700'
+
+    # Same file-based AWS credential pattern as docker-infisical/deploy.yml -
+    # the route53 Caddy plugin picks this up via AWS_SHARED_CREDENTIALS_FILE
+    # (see docker-compose.override.yml below), not a plain env var.
+    - name: Write the AWS credentials file for Caddy's Route53 DNS-01 challenge
+      ansible.builtin.copy:
+        dest: "{{ stack_dir }}/secrets/aws_credentials"
+        content: |
+          [default]
+          aws_access_key_id = {{ shared_secrets.ROUTE53_BAUER_ACCESS_KEY_ID }}
+          aws_secret_access_key = {{ shared_secrets.ROUTE53_BAUER_SECRET_ACCESS_KEY }}
+        mode: '0600'
+
+    # caddy/Dockerfile and caddy/Caddyfile live in this repo, not upstream
+    # netbox-docker (unlike docker-infisical, which owns its whole compose
+    # stack as a self-authored repo) - copied onto the host same as the
+    # override file below.
+    - name: Ensure the Caddy build context directory exists
+      ansible.builtin.file:
+        path: "{{ stack_dir }}/caddy"
+        state: directory
+        mode: '0755'
+
+    - name: Copy the Caddy build context onto the host
+      ansible.builtin.copy:
+        src: "caddy/{{ item }}"
+        dest: "{{ stack_dir }}/caddy/{{ item }}"
+        mode: '0644'
+      loop:
+        - Dockerfile
+        - Caddyfile
+
+    # netbox-docker's default docker-compose.yml publishes no port to the
+    # host at all - confirmed live (grep for `ports:` in the actual file
+    # comes back empty) - it expects a reverse proxy in front by
+    # convention. Caddy is that reverse proxy, terminating real Let's
+    # Encrypt TLS via Route53 DNS-01 (same pattern as docker-infisical) -
+    # NetBox itself is no longer published directly, Caddy is the sole
+    # public entry point.
+    - name: Write docker-compose.override.yml to add the Caddy reverse proxy
+      ansible.builtin.copy:
+        dest: "{{ stack_dir }}/docker-compose.override.yml"
+        content: |
+          services:
+            caddy:
+              container_name: netbox-caddy
+              build:
+                context: ./caddy
+              image: netbox-caddy:2.11.4-route53-1.6.2
+              restart: unless-stopped
+              environment:
+                - NETBOX_HOST={{ netbox_host }}
+                - AWS_SHARED_CREDENTIALS_FILE=/run/secrets/aws_credentials
+                - AWS_REGION={{ shared_secrets.ROUTE53_BAUER_REGION | default('us-east-1') }}
+                - AWS_HOSTED_ZONE_ID={{ shared_secrets.ROUTE53_BAUER_HOSTED_ZONE_ID | default('') }}
+              secrets:
+                - aws_credentials
+              ports:
+                - "80:80"
+                - "443:443"
+              volumes:
+                - caddy-data:/data
+              depends_on:
+                - netbox
+
+          secrets:
+            aws_credentials:
+              file: ./secrets/aws_credentials
+
+          volumes:
+            caddy-data:
+        mode: '0644'
+
+    # Confirmed live: on a genuinely fresh deploy, the netbox container's
+    # first-run migrations/static-collection reliably take longer than its
+    # healthcheck's 90s start_period, so `docker compose up -d` (which waits
+    # on netbox-worker's dependency condition: service_healthy) fails the
+    # first time with "dependency netbox failed to start" even though the
+    # container goes healthy moments later on its own. Retrying rather than
+    # failing outright - each retry is a plain `docker compose up -d`, which
+    # is idempotent and just re-attaches to whatever's already healthy once
+    # netbox catches up.
+    # --build so an updated Caddyfile/Dockerfile actually gets baked into a
+    # fresh image - `up -d` alone reuses whatever was already built under
+    # this same image tag, silently ignoring source changes.
     - name: Deploy the NetBox stack
-      ansible.builtin.command: docker compose up -d
+      ansible.builtin.command: docker compose up -d --build
       args:
         chdir: "{{ stack_dir }}"
       changed_when: true
+      register: compose_up
+      retries: 6
+      delay: 30
+      until: compose_up.rc == 0

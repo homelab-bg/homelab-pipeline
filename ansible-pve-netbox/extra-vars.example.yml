@@ -4,6 +4,10 @@
 
 netbox_docker_version: 5.0.2 # https://github.com/netbox-community/netbox-docker/releases - bump deliberately
 
+# Public hostname Caddy requests the Let's Encrypt cert for and reverse
+# proxies to NetBox - matches the A record in tf-pve-netbox/dns.tf.
+netbox_host: changeme
+
 # NetBox's own internal app secrets (Django SECRET_KEY, DB/Redis passwords,
 # API token pepper) moved to Infisical (/ansible-pve-netbox folder, "prod"
 # env) - netbox-deploy.yml reads them at deploy time via the

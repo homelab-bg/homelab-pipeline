@@ -9,6 +9,17 @@
         state: latest # noqa: package-latest - deliberate full upgrade, not a pinned install
         update_cache: true
 
+    # Confirmed live: apt_repository's signed-by= keyring validation needs
+    # either apt-key (removed on modern Debian) or the gpg binary itself,
+    # and Debian 13's minimal CT template ships neither - unlike Ubuntu's
+    # cloud image, which docker-dependencies.yml was originally written
+    # against (ansible-pve-docker-green) and never hit this.
+    - name: Install gnupg (required by apt_repository's signed-by= validation)
+      ansible.builtin.apt:
+        name: gnupg
+        state: present
+        update_cache: true
+
     - name: Create keyring directory for apt signing keys
       ansible.builtin.file:
         path: /etc/apt/keyrings

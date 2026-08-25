@@ -1,0 +1,31 @@
+# Mirrors docker-infisical/caddy/Caddyfile - same ACME-via-Route53-DNS-01
+# setup, just fronting NetBox instead. See that file for the full reasoning
+# behind each directive below.
+{$NETBOX_HOST} {
+	tls {
+		# No explicit access_key_id/secret_access_key - the route53 plugin
+		# uses the standard AWS SDK credential chain, which picks up
+		# AWS_SHARED_CREDENTIALS_FILE automatically (see docker-compose.override.yml).
+		dns route53 {
+			hosted_zone_id {$AWS_HOSTED_ZONE_ID}
+		}
+
+		# Required, not cosmetic - see docker-infisical/caddy/Caddyfile:
+		# Docker's internal resolver forwards to our own internal
+		# Technitium servers, which are authoritative for lan.bauer.com.au
+		# and won't have the public _acme-challenge TXT record.
+		resolvers 9.9.9.9
+
+		# Confirmed live: 9.9.9.9 negatively caches the _acme-challenge
+		# NXDOMAIN it sees before Route53's change propagates, then keeps
+		# serving that cached NXDOMAIN for longer than the default ~2m
+		# propagation_timeout - every retry in that window fails
+		# identically even though the record is genuinely live elsewhere
+		# (confirmed via 1.1.1.1 resolving it correctly the whole time).
+		# 5m gives a single attempt enough runway to outlast Quad9's
+		# negative-cache window instead of relying on lucky retry timing.
+		propagation_timeout 5m
+	}
+
+	reverse_proxy netbox:8080
+}
