@@ -1,0 +1,7 @@
+# Copy to local.auto.tfvars and fill in real values - local.auto.tfvars is gitignored
+# and auto-loaded by Terraform, this .example file is committed for reference only.
+
+infisical_host          = "https://secrets.lan.example.com"
+infisical_project_id    = "changeme"
+infisical_client_id     = "changeme"
+infisical_client_secret = "changeme"

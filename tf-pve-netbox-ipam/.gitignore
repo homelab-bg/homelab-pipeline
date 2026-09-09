@@ -1,0 +1,18 @@
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+tfplan
+*.tfplan
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Real internal topology (real hostnames/IPs) - not committed, matching
+# tf-dns-technitium/records.tf's precedent. Revisit both together once
+# Steve's decided what he wants from this repo long-term (tracked in
+# IPAM.md's "Next steps").
+hydration.tf
