@@ -6,7 +6,7 @@ traefik_email: traefik@example.internal
 traefik_version: v3.7.10 # v3.6.0+ required on Docker 29+ hosts
 traefik_domain: traefik.lan.example.green
 
-# CNAME onto traefik_domain, not docker1's own domain (see
+# CNAME onto traefik_domain, not docker-green's own domain (see
 # tf-pve-docker-green/dns.tf) - reflects the actual request path (client ->
 # Traefik -> Portainer container) rather than the bare host address.
 portainer_domain: portainer.lan.example.green
@@ -40,7 +40,7 @@ infisical_project_id: changeme
 infisical_client_id: changeme
 infisical_client_secret: changeme
 
-# CephFS - shared storage mounted on docker1 at /mnt/cephfs. See cephfs-mount.yml.
+# CephFS - shared storage mounted on docker-green at /mnt/cephfs. See cephfs-mount.yml.
 # client key comes from `ceph fs authorize cephfs client.green / rw` on the PVE
 # cluster - own key, not swarm's client.swarm, same least-privilege-per-consumer
 # pattern as everything else in this pipeline.

@@ -1,5 +1,5 @@
 ---
-- name: Deploy Traefik + Portainer + dnsweaver on docker1
+- name: Deploy Traefik + Portainer + dnsweaver on docker-green
   hosts: green
   vars:
     stack_dir: "{{ ansible_env.HOME }}/traefik-portainer"
@@ -36,7 +36,7 @@
       when: not stack_dir_git.stat.exists
 
     # Clones directly from GitHub (public repo, no credentials needed on
-    # docker1) rather than rsyncing a local sibling clone - guarantees what's
+    # docker-green) rather than rsyncing a local sibling clone - guarantees what's
     # deployed always matches a real pushed commit, no risk of deploying
     # stale or uncommitted local state. Pinned to a release tag (see
     # docker_traefik_portainer_version's default, YYYY.MM.releaseID) rather

@@ -91,7 +91,7 @@ assumes static allocations stay in `.2`-`.99` or `.200`-`.254`.
 | `.10`-`.19` | Core shared platform/storage services | TrueNAS/MinIO `.10`; `secrets` LXC `.15`; `netbox` LXC `.17` |
 | `.20`-`.30` | Reserved / available | |
 | `.31`-`.39` | **Kubernetes control-plane nodes** | `.31`-`.32` in use (`.33` next); remainder held for expansion room, not a fixed target node count |
-| `.40` | `docker-green` (`docker1`) | moved from `.41` to make room for k8s workers below |
+| `.40` | `docker-green` | moved from `.41` to make room for k8s workers below |
 | `.41`-`.49` | **Kubernetes worker nodes** | reserved, not yet provisioned; `.41`-`.43` for the initial 3, remainder held for expansion |
 | `.50` | Reserved / available | |
 | `.51`-`.59` | **MetalLB LoadBalancer pool** | reserved, not yet provisioned - deliberately separate from node IPs; L2 mode needs a block never handed to a node or by DHCP, but still on-segment |
@@ -181,7 +181,7 @@ All rows below marked **hydrated** are now live in NetBox (`tf-pve-netbox-ipam`)
 | `.10` | `truenas-bne1` / `minio` / `minio-console` | TrueNAS + MinIO (Terraform state backend) | out of band; DNS records via `tf-dns-technitium`; **hydrated** |
 | `.15` | `secrets` | Infisical (self-hosted secrets manager) | community-scripts (`ct/docker.sh`), no matching `tf-pve-*` module yet; **hydrated** |
 | `.17` | `netbox` | NetBox (this file's own IPAM instance) | `tf-pve-netbox` + `ansible-pve-netbox`; **hydrated** (permanent exception - can't self-register, see "Two allocation paths") |
-| `.40` | `docker-green` (`docker1`) | Playground-tier Docker host (Traefik/Portainer) | `tf-pve-docker-green` + `ansible-pve-docker-green` - moved from `.41` on 2026-08-25 to free `.41`-`.43` for k8s workers; **not hydrated** - candidate for its own IPAM section instead |
+| `.40` | `docker-green` | Playground-tier Docker host (Traefik/Portainer) | `tf-pve-docker-green` + `ansible-pve-docker-green` - moved from `.41` on 2026-08-25 to free `.41`-`.43` for k8s workers; **not hydrated** - candidate for its own IPAM section instead |
 | `.111` | `jump` | Jump host | out of band; DNS record via `tf-dns-technitium`; sits inside the DHCP pool - see flagged concern above; **hydrated** |
 | `.112` | `packer-builder` | Packer template builder VM | `tf-pve-packer`; sits inside the DHCP pool - see flagged concern above; **not hydrated** - candidate for its own IPAM section instead |
 | `.184` | (GH Actions runner) | `homelab-ci` self-hosted runner | community-scripts (`ct/docker.sh`), no matching `tf-pve-*` module yet; sits inside the DHCP pool - see flagged concern above; **hydrated** |

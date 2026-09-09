@@ -11,7 +11,7 @@ infisical_host          = "https://secrets.lan.example.com"
 infisical_project_id    = "changeme"
 infisical_client_id     = "changeme"
 infisical_client_secret = "changeme"
-docker_domain           = "docker1.lan.example.green"
+docker_domain           = "docker-green.lan.example.green"
 portainer_domain = "portainer.lan.example.green"
 traefik_domain   = "traefik.lan.example.green"
 
@@ -19,7 +19,7 @@ authorized_github_users = ["your-github-username"]
 
 vm = {
   vmid     = 100067
-  name     = "docker1"
+  name     = "docker-green"
   ipaddr   = "10.0.0.41"
   node     = "pve3"
   template = 926043

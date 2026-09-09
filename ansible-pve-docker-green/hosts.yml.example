@@ -4,7 +4,7 @@ all:
   children:
     green:
       hosts:
-        docker1:
+        docker-green:
           ansible_host: 192.168.0.41
   vars:
     ansible_user: ubuntu

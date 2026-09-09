@@ -1,4 +1,4 @@
-# docker1.lan.homelab.green - plain A record, the host's own identity (SSH,
+# docker-green.lan.homelab.green - plain A record, the host's own identity (SSH,
 # inventory). No Failover/Weighted Round Robin app needed anywhere in this
 # module: that mechanism exists to solve the multi-A-record fast-flux
 # problem, which doesn't arise with exactly one target - a single host is
@@ -10,9 +10,9 @@ resource "technitium_record" "docker" {
   ip_address = var.vm.ipaddr
 }
 
-# traefik.lan.homelab.green - direct A record, not a CNAME to docker1.
+# traefik.lan.homelab.green - direct A record, not a CNAME to docker-green.
 # Dynamic per-app CNAMEs (dnsweaver, per-container, pointing at this name)
-# should resolve in one hop, not chain through docker1 as well.
+# should resolve in one hop, not chain through docker-green as well.
 resource "technitium_record" "traefik" {
   domain     = var.traefik_domain
   type       = "A"
@@ -20,7 +20,7 @@ resource "technitium_record" "traefik" {
   ip_address = var.vm.ipaddr
 }
 
-# portainer.lan.homelab.green - CNAME onto traefik, not docker1: reflects
+# portainer.lan.homelab.green - CNAME onto traefik, not docker-green: reflects
 # the actual request path (client -> Traefik -> Portainer container) rather
 # than the bare host address.
 resource "technitium_record" "portainer" {

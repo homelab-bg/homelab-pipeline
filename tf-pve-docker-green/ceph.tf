@@ -1,7 +1,7 @@
 # Reads tf-pve-ceph's outputs (mon_hosts, fs_name) - read-only, so this never
 # participates in this config's own destroy plan and doesn't reintroduce the
 # coupling tf-pve-ceph's separate state is there to avoid. See tf-pve-ceph
-# section in the top-level README for the full rationale. docker1 uses its
+# section in the top-level README for the full rationale. docker-green uses its
 # own Ceph client key (client.green) rather than the swarm's client.swarm -
 # that's set up in ansible-pve-docker-green, not here.
 data "terraform_remote_state" "ceph" {

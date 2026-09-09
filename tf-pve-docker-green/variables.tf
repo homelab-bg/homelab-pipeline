@@ -1,4 +1,4 @@
-# Networking - same LAN as every other module in this pipeline. docker1 sits
+# Networking - same LAN as every other module in this pipeline. docker-green sits
 # on the existing subnet; lan.homelab.green (see dns.tf) is only the DNS zone
 # this host's record lives in, not a separate network.
 variable "lan_domain" {
@@ -78,7 +78,7 @@ variable "infisical_client_secret" {
 
 variable "docker_domain" {
   type        = string
-  description = "Domain for the docker-green host itself (A record), e.g. docker1.lan.homelab.green - matches ansible-pve-docker-green's extra-vars. No default - supply via a gitignored local.auto.tfvars (see local.auto.tfvars.example)."
+  description = "Domain for the docker-green host itself (A record), e.g. docker-green.lan.homelab.green - matches ansible-pve-docker-green's extra-vars. No default - supply via a gitignored local.auto.tfvars (see local.auto.tfvars.example)."
 }
 
 variable "portainer_domain" {

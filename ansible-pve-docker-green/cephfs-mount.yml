@@ -1,5 +1,5 @@
 ---
-- name: Mount shared CephFS storage on docker1
+- name: Mount shared CephFS storage on docker-green
   hosts: green
   become: true
   vars:

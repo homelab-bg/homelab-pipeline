@@ -1,5 +1,5 @@
 ---
-- name: Install and configure Docker on docker1
+- name: Install and configure Docker on docker-green
   hosts: green
   become: true
   tasks:

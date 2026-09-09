@@ -1,7 +1,7 @@
 ---
-- name: Install Docker on docker1
+- name: Install Docker on docker-green
   import_playbook: docker-dependencies.yml
-- name: Mount shared CephFS storage on docker1
+- name: Mount shared CephFS storage on docker-green
   import_playbook: cephfs-mount.yml
 - name: Deploy Traefik + Portainer
   import_playbook: traefik-portainer.yml
