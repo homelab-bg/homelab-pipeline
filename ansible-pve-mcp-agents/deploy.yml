@@ -1,0 +1,141 @@
+---
+- name: Deploy the MCP/agents stack on docker-mcp-agents
+  hosts: mcp_agents
+  vars:
+    stack_dir: "{{ ansible_env.HOME }}/docker-mcp-agents"
+    # App secrets (HA/UniFi/TrueNAS credentials) - scoped read-only to this
+    # playbook's own /ansible-pve-mcp-agents folder via a dedicated machine
+    # identity (same least-privilege-per-consumer pattern as every other
+    # module - see homelab-pipeline SECRETS.md).
+    mcp_secrets: "{{ lookup('infisical.vault.read_secrets',
+      universal_auth_client_id=infisical_client_id,
+      universal_auth_client_secret=infisical_client_secret,
+      project_id=infisical_project_id,
+      env_slug='prod',
+      path='/ansible-pve-mcp-agents',
+      as_dict=True,
+      url=infisical_host
+      ) }}"
+
+    # Route53 DNS-01 credential for Caddy - lan.homelab.green zone, shared
+    # with ansible-pve-docker-green's Traefik (same real credential, moved
+    # to /shared once it had 2 consumers - see SECRETS.md).
+    shared_secrets: "{{ lookup('infisical.vault.read_secrets',
+      universal_auth_client_id=infisical_client_id,
+      universal_auth_client_secret=infisical_client_secret,
+      project_id=infisical_project_id,
+      env_slug='prod',
+      path='/shared',
+      as_dict=True,
+      url=infisical_host
+      ) }}"
+
+  tasks:
+    - name: Check whether the stack directory is already a git checkout
+      ansible.builtin.stat:
+        path: "{{ stack_dir }}/.git"
+      register: stack_dir_git
+
+    - name: Remove non-git stack directory before first git-based deploy
+      ansible.builtin.file:
+        path: "{{ stack_dir }}"
+        state: absent
+      when: not stack_dir_git.stat.exists
+
+    # Public repo, no credentials needed on the host. No force=true needed
+    # here (unlike netbox-deploy.yml) - this repo has no tracked files this
+    # playbook overwrites in place; secrets/.env are untracked, same as
+    # traefik-portainer's precedent.
+    - name: Clone/update docker-mcp-agents from GitHub
+      ansible.builtin.git:
+        repo: https://github.com/homelab-bg/docker-mcp-agents.git
+        dest: "{{ stack_dir }}"
+        version: "{{ docker_mcp_agents_version | default('main') }}"
+
+    - name: Ensure secrets directory exists
+      ansible.builtin.file:
+        path: "{{ stack_dir }}/secrets"
+        state: directory
+        mode: '0755'
+
+    # 644 not 600 - standalone (non-Swarm) Compose bind-mounts these files
+    # directly rather than rewrapping them, so the container sees the host
+    # file's actual permissions. Each image runs as its own non-root UID,
+    # which won't generally match the host user's UID - 600 (owner-only)
+    # causes Permission denied for every image except one whose UID happens
+    # to match. Confirmed in this repo's own README - matches its documented
+    # requirement, not this pipeline's usual 0600 convention for secrets.
+    - name: Write the HA long-lived token
+      ansible.builtin.copy:
+        dest: "{{ stack_dir }}/secrets/ha_token.txt"
+        content: "{{ mcp_secrets.HA_TOKEN }}"
+        mode: '0644'
+
+    - name: Write the UniFi password
+      ansible.builtin.copy:
+        dest: "{{ stack_dir }}/secrets/unifi_password.txt"
+        content: "{{ mcp_secrets.UNIFI_PASSWORD }}"
+        mode: '0644'
+
+    - name: Write the TrueNAS API key
+      ansible.builtin.copy:
+        dest: "{{ stack_dir }}/secrets/truenas_api_key.txt"
+        content: "{{ mcp_secrets.TRUENAS_API_KEY }}"
+        mode: '0644'
+
+    - name: Write the AWS credentials file for Caddy's Route53 DNS-01 challenge
+      ansible.builtin.copy:
+        dest: "{{ stack_dir }}/secrets/aws_credentials"
+        content: |
+          [default]
+          aws_access_key_id = {{ shared_secrets.ROUTE53_HOMELABGREEN_ACCESS_KEY_ID }}
+          aws_secret_access_key = {{ shared_secrets.ROUTE53_HOMELABGREEN_SECRET_ACCESS_KEY }}
+        mode: '0644'
+
+    - name: Write the .env file
+      ansible.builtin.copy:
+        dest: "{{ stack_dir }}/.env"
+        content: |
+          HOMEASSISTANT_URL={{ homeassistant_url }}
+          UNIFI_HOST={{ unifi_host }}
+          UNIFI_USERNAME={{ unifi_username }}
+          TRUENAS_URL={{ truenas_url }}
+          HA_MCP_HOST={{ ha_mcp_domain }}
+          UNIFI_NETWORK_MCP_HOST={{ unifi_network_mcp_domain }}
+          UNIFI_PROTECT_MCP_HOST={{ unifi_protect_mcp_domain }}
+          UNIFI_ACCESS_MCP_HOST={{ unifi_access_mcp_domain }}
+          TRUENAS_MCP_HOST={{ truenas_mcp_domain }}
+          AWS_REGION={{ shared_secrets.ROUTE53_HOMELABGREEN_REGION | default('us-east-1') }}
+          AWS_HOSTED_ZONE_ID={{ shared_secrets.ROUTE53_HOMELABGREEN_HOSTED_ZONE_ID }}
+        mode: '0600'
+
+    # Entrypoint scripts keep their exec bit from git (committed as 100755),
+    # so no separate chmod +x needed here - unlike the README's manual-setup
+    # instructions, which assume files arrived via copy/paste rather than a
+    # real git clone.
+    - name: Pull pre-built images
+      ansible.builtin.command: docker compose pull
+      args:
+        chdir: "{{ stack_dir }}"
+      changed_when: true
+
+    - name: Build the truenas-mcp image
+      ansible.builtin.command: docker compose build truenas-mcp
+      args:
+        chdir: "{{ stack_dir }}"
+      changed_when: true
+
+    # Retrying rather than failing outright, same idiom as
+    # ansible-pve-netbox/netbox-deploy.yml - Caddy's first-run cert
+    # issuance (real ACME DNS-01, can take several minutes with the
+    # propagation_timeout it's configured for) shouldn't be mistaken for a
+    # deploy failure if `docker compose up -d` returns before it's done.
+    - name: Deploy the MCP/agents stack
+      ansible.builtin.command: docker compose up -d
+      args:
+        chdir: "{{ stack_dir }}"
+      changed_when: true
+      register: compose_up
+      retries: 3
+      delay: 30
+      until: compose_up.rc == 0

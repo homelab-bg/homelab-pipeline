@@ -1,0 +1,29 @@
+---
+# Copy to extra-vars.yml and fill in real values - extra-vars.yml is gitignored.
+# Run with: ansible-playbook -i hosts.yml bootstrap.yml --ask-become-pass -e @extra-vars.yml
+
+docker_mcp_agents_version: main # pin to a real tag once one exists - see homelab-pipeline README
+
+# App secrets (HA long-lived token, UniFi password, TrueNAS API key) live in
+# Infisical (/ansible-pve-mcp-agents folder, "prod" env) - deploy.yml reads
+# them at deploy time via the infisical.vault.read_secrets lookup,
+# authenticated through this playbook's own scoped machine identity below.
+infisical_host: https://secrets.lan.example.com
+infisical_project_id: changeme
+infisical_client_id: changeme
+infisical_client_secret: changeme
+
+# Non-secret config - hostnames/usernames, nothing sensitive.
+homeassistant_url: https://your-instance.ui.nabu.casa
+unifi_host: 192.168.0.1
+unifi_username: your-unifi-username
+truenas_url: truenas.lan.example.internal
+
+# TLS/Caddy - matches docker-mcp-agents' own .env.example. No
+# letsencrypt_email - docker-infisical's Caddy doesn't set one either
+# (works fine without one; Let's Encrypt only uses it for expiry notices).
+ha_mcp_domain: ha-mcp.lan.example.green
+unifi_network_mcp_domain: unifi-network-mcp.lan.example.green
+unifi_protect_mcp_domain: unifi-protect-mcp.lan.example.green
+unifi_access_mcp_domain: unifi-access-mcp.lan.example.green
+truenas_mcp_domain: truenas-mcp.lan.example.green

@@ -1,0 +1,5 @@
+---
+- name: Install Docker on docker-mcp-agents
+  import_playbook: docker-dependencies.yml
+- name: Deploy the MCP/agents stack
+  import_playbook: deploy.yml

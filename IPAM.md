@@ -95,7 +95,7 @@ assumes static allocations stay in `.2`-`.99` or `.200`-`.254`.
 | `.41`-`.49` | **Kubernetes worker nodes** | reserved, not yet provisioned; `.41`-`.43` for the initial 3, remainder held for expansion |
 | `.50` | Reserved / available | |
 | `.51`-`.59` | **MetalLB LoadBalancer pool** | reserved, not yet provisioned - deliberately separate from node IPs; L2 mode needs a block never handed to a node or by DHCP, but still on-segment |
-| `.60`-`.99` | Reserved / available | |
+| `.60`-`.99` | General-purpose VMs/LXCs (requested from NetBox, not hand-picked) | `.60` = `docker-mcp-agents`, first host provisioned via `netbox_available_ip_address` rather than a manually-chosen address - see "Two allocation paths" below |
 | `.101`-`.199` | **DHCP pool** | router-assigned, not for static allocation - see the flagged overlap below |
 | `.200`-`.209` | Proxmox hypervisor hosts | `pve1`-`pve3` = `.201`-`.203` |
 | `.210`-`.240` | Reserved / available | |
@@ -127,6 +127,14 @@ IP's last octet where practical. Not retrofitted onto pre-existing hosts that do
 e.g. `netbox - bootstrap infra`, `steve-default`, so the reverse lookup from NetBox back to the owning
 module/repo doesn't require guessing.
 
+**One `netbox_ip_range` + matching `netbox_tag` per band** in the addressing-scheme table below (see
+`tf-pve-netbox-ipam/hydration.tf`) - `netbox_ip_range` has no name/slug field of its own, so a tag (named
+identically to the range, e.g. `reserved-60-99`, `k8s-control-plane`) is the only structured way for a
+consuming module to look one up (`data "netbox_ip_ranges" { filter { name = "tag" ... } }`) without
+hardcoding a numeric ID. Confirmed live that this provider's `tags` argument does **not** auto-create a
+referenced tag - it errors ("could not locate referenced tag") if one doesn't already exist as a real
+`netbox_tag` resource.
+
 ## Two allocation paths: bootstrap infra vs. everything else
 
 **"Bootstrap infra"** - NetBox itself, Infisical (`secrets`), the Technitium DNS servers, the Proxmox
@@ -138,17 +146,19 @@ config rather than allocated through Technitium itself. This is a permanent char
 infra, not a gap to eventually close. Deliberately excludes `docker-green` and `packer-builder` - both
 already have their own `tf-pve-*` module, so they follow the path below instead, not this one.
 
-**Everything else** (workload modules - `docker-green`/`packer-builder` today, the upcoming k8s module,
-future general-purpose VMs/LXCs) is meant to move to **programmatic allocation**: the module's own
-Terraform claims its IP from NetBox at `apply` time (via the `e-breuninger/netbox` Terraform provider
-against the `tf-pve-netbox-ipam` credential - see `SECRETS.md`), instead of a human picking a free address
-from this file by hand. Given this project's general preference for deliberate static assignment (see the
-range tables above, all pre-planned rather than DHCP-style auto-pick), expect most of these to use
-`netbox_ip_address` with an explicit address rather than `netbox_available_ip_address`'s "claim whatever's
-next free" behaviour - though the latter remains available if a genuinely address-agnostic case comes up.
-This isn't built into any workload module yet - the SOP below is the current (manual) process, used until
-a given module gets its own "IPAM section" added. Cycling back to retrofit `docker-green` and
-`packer-builder` with this is tracked as a follow-up below, not done as part of this session's work.
+**Everything else** (workload modules - `docker-green`/`packer-builder`/`docker-mcp-agents` today, the
+upcoming k8s module, future general-purpose VMs/LXCs) is meant to move to **programmatic allocation**: the
+module's own Terraform claims its IP from NetBox at `apply` time (via the `e-breuninger/netbox` Terraform
+provider against the shared `NETBOX_URL`/`NETBOX_API_TOKEN` credential in `/shared` - see `SECRETS.md`),
+instead of a human picking a free address from this file by hand. `tf-pve-mcp-agents` is the first real
+example: `netbox_available_ip_address`, scoped to the `reserved-60-99` range's `ip_range_id` (found via a
+`data "netbox_ip_ranges"` filter on that range's tag - see "NetBox structure" below), returned `.60` on
+first apply. Given this project's general preference for deliberate static assignment otherwise (see the
+range tables above, all pre-planned rather than DHCP-style auto-pick), expect hosts with a specific planned
+address (like the k8s nodes) to keep using `netbox_ip_address` with an explicit value - `mcp-agents` used
+the "claim next free from a general-purpose band" path specifically because it didn't have one. Cycling
+back to retrofit `docker-green` and `packer-builder` with their own IPAM section is tracked as a follow-up
+below.
 
 ## SOP: allocating a new static IP (current, manual process)
 
@@ -182,6 +192,7 @@ All rows below marked **hydrated** are now live in NetBox (`tf-pve-netbox-ipam`)
 | `.15` | `secrets` | Infisical (self-hosted secrets manager) | community-scripts (`ct/docker.sh`), no matching `tf-pve-*` module yet; **hydrated** |
 | `.17` | `netbox` | NetBox (this file's own IPAM instance) | `tf-pve-netbox` + `ansible-pve-netbox`; **hydrated** (permanent exception - can't self-register, see "Two allocation paths") |
 | `.40` | `docker-green` | Playground-tier Docker host (Traefik/Portainer) | `tf-pve-docker-green` + `ansible-pve-docker-green` - moved from `.41` on 2026-08-25 to free `.41`-`.43` for k8s workers; **not hydrated** - candidate for its own IPAM section instead |
+| `.60` | `docker-mcp-agents` | MCP servers (HA/UniFi/TrueNAS) + agents for Claude Desktop/Code, behind Caddy | `tf-pve-mcp-agents` + `ansible-pve-mcp-agents` - **first host with its own IPAM section from day one**: requested via `netbox_available_ip_address` scoped to the `reserved-60-99` range's tag, not hand-picked; not part of the bootstrap-infra hydration |
 | `.111` | `jump` | Jump host | out of band; DNS record via `tf-dns-technitium`; sits inside the DHCP pool - see flagged concern above; **hydrated** |
 | `.112` | `packer-builder` | Packer template builder VM | `tf-pve-packer`; sits inside the DHCP pool - see flagged concern above; **not hydrated** - candidate for its own IPAM section instead |
 | `.184` | (GH Actions runner) | `homelab-ci` self-hosted runner | community-scripts (`ct/docker.sh`), no matching `tf-pve-*` module yet; sits inside the DHCP pool - see flagged concern above; **hydrated** |
@@ -232,8 +243,9 @@ redundant, same as `SECRETS.md`'s root-of-trust secrets being kept outside Infis
 - **Confirm the DHCP-pool overlap** (`.111`, `.112`, `.184`, and `mc` at `.101`) - check the router/DHCP
   server for static reservations or exclusions before treating it as safe.
 - **Retrofit `docker-green` and `packer-builder`** with their own "IPAM section" (programmatic allocation
-  via the NetBox provider), per the two-path model above - the first two candidates now that bootstrap
-  infra is hydrated.
+  via the NetBox provider), per the two-path model above - `docker-mcp-agents` proved this works
+  (`netbox_available_ip_address` scoped to a tagged `netbox_ip_range`, confirmed live), these two are the
+  remaining candidates now that bootstrap infra is hydrated.
 - **Resolve the `records.tf`/`hydration.tf` commit policy** - both are real-topology files currently kept
   local/gitignored rather than committed, unlike everything else in this repo. Revisit once decided what
   this repo should do long-term with files that map the full baseline infra in one place.

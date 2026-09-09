@@ -8,17 +8,17 @@ provider "infisical" {
   }
 }
 
-# Scoped read-only to this module's own folder - the "tf-pve-netbox-ipam-reader"
-# machine identity's additional privilege only grants secrets:read on
-# env prod, path /tf-pve-netbox-ipam (see homelab-pipeline SECRETS.md for how
-# the Infisical project/folder structure is organised).
-data "infisical_secrets" "this" {
+# NETBOX_URL/NETBOX_API_TOKEN moved to /shared - tf-pve-mcp-agents also needs them now
+# (to request its own IP), and this credential has no meaningful per-module scope to
+# narrow further beyond "can talk to NetBox" (same reasoning as ROUTE53_BAUER_* moving
+# to /shared once it had 2 consumers - see SECRETS.md).
+data "infisical_secrets" "shared" {
   env_slug     = "prod"
   workspace_id = var.infisical_project_id
-  folder_path  = "/tf-pve-netbox-ipam"
+  folder_path  = "/shared"
 }
 
 provider "netbox" {
-  server_url = data.infisical_secrets.this.secrets["NETBOX_URL"].value
-  api_token  = data.infisical_secrets.this.secrets["NETBOX_API_TOKEN"].value
+  server_url = data.infisical_secrets.shared.secrets["NETBOX_URL"].value
+  api_token  = data.infisical_secrets.shared.secrets["NETBOX_API_TOKEN"].value
 }

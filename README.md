@@ -3,16 +3,23 @@
 Packer + Terraform + Ansible pipeline for a Proxmox VE homelab cluster (`pve1`/`pve2`/`pve3`).
 
 ```
-pkr-pve-templates/         Packer: builds golden Ubuntu cloud-init and Talos templates, deploys them to
-                             every PVE node
+pkr-pve-templates/          Packer: builds golden Ubuntu cloud-init and Talos templates, deploys them to
+                            every PVE node
 tf-pve-packer/              Terraform: provisions the "packer-builder" VM used to run the above
 tf-pve-template-smoketest/  Terraform: single-VM smoke test, clones a template via DHCP
 tf-pve-ceph/                Terraform: CephFS (MDS + filesystem) on the PVE cluster itself - own state,
-                             deliberately decoupled from the VMs' lifecycle
+                            deliberately decoupled from the VMs' lifecycle
 tf-dns-technitium/          Terraform: manual/static Technitium DNS records - own state
 tf-pve-docker-green/        Terraform: the docker-green host (single VM) + its DNS records
 ansible-pve-docker-green/   Ansible: installs Docker, mounts CephFS, deploys Traefik + Portainer +
-                             dnsweaver onto docker-green
+                            dnsweaver onto docker-green
+tf-pve-netbox/              Terraform: the NetBox LXC (first Terraform-managed LXC in this project)
+ansible-pve-netbox/         Ansible: installs Docker, deploys NetBox + Caddy (TLS via Route53 DNS-01)
+tf-pve-netbox-ipam/         Terraform: hydrates NetBox with bootstrap-infra IPs/ranges/tags - see IPAM.md
+tf-pve-mcp-agents/          Terraform: the docker-mcp-agents host (single VM) + its DNS records - first
+                            module to request its IP from NetBox rather than hand-picking one
+ansible-pve-mcp-agents/     Ansible: installs Docker, deploys the docker-mcp-agents stack (MCP servers
+                            for HA/UniFi/TrueNAS + Caddy) behind Caddy
 ```
 
 `ansible-pve-docker-green` deploys [`docker-traefik-portainer`](https://github.com/homelab-bg/docker-traefik-portainer) - a separate, public repo, not a subdirectory here. It's cloned directly onto the target host at deploy time (unauthenticated HTTPS), not kept as a local sibling checkout - see that repo's own README for the compose stack itself.
@@ -307,9 +314,84 @@ ansible-playbook -i hosts.yml bootstrap.yml --ask-become-pass -e @extra-vars.yml
 2. **`cephfs-mount.yml`** — mounts the shared CephFS filesystem at `/mnt/cephfs`, using its own `client.green` CephX key (see `tf-pve-ceph` above).
 3. **`traefik-portainer.yml`** — clones [`docker-traefik-portainer`](https://github.com/homelab-bg/docker-traefik-portainer) directly from GitHub (public, unauthenticated HTTPS - no credentials needed on the target host) and deploys it via `docker compose up -d`. Writes two file-based secrets first (`secrets/aws_credentials` for Traefik's Route53 DNS-01 challenge, `secrets/technitium_token` for dnsweaver) rather than passing them as plain environment variables. Persistent data (Portainer's DB, Traefik's issued certs) bind-mounts onto the CephFS mount from step 2, so a VM rebuild doesn't take them with it.
 
-`hosts.yml` needs a `green` group with `docker-green`'s IP. `extra-vars.yml` must supply: `traefik_email`/`traefik_version`/`traefik_domain`, `portainer_domain`/`portainer_version`/`portainer_port`, `network_name`, `technitium_url`, `dnsweaver_version`/`dnsweaver_zone`/`dnsweaver_domains`/`dnsweaver_technitium_token` (a token scoped to just that one zone - Technitium's permission model supports per-zone ACLs, use a dedicated user, not the admin account), `route53_green_access_key_id`/`route53_green_secret_access_key`/`route53_green_region`/`route53_green_hosted_zone_id` (scoped to the *public* hosted zone used only for the ACME DNS-01 challenge - separate from the internal Technitium zone), and `cephfs_mon_hosts`/`cephfs_name`/`cephfs_client_name`/`cephfs_client_key`.
+`hosts.yml` needs a `green` group with `docker-green`'s IP. `extra-vars.yml` must supply: `traefik_email`/`traefik_version`/`traefik_domain`, `portainer_domain`/`portainer_version`/`portainer_port`, `network_name`, `technitium_url`, `dnsweaver_version`/`dnsweaver_zone`/`dnsweaver_domains`, `infisical_host`/`infisical_project_id`/`infisical_client_id`/`infisical_client_secret` (this module's scoped identity, reading `DNSWEAVER_TECHNITIUM_TOKEN`/`CEPHFS_CLIENT_KEY` from its own `/ansible-pve-docker-green` folder and the Route53 DNS-01 credential for the `lan.homelab.green` zone from `/shared` - see `SECRETS.md`), and `cephfs_mon_hosts`/`cephfs_name`/`cephfs_client_name`.
 
 `traefik-portainer.yml` can also be run on its own (without the full `bootstrap.yml` chain) once Docker and the CephFS mount are already in place - e.g. to pick up a new `docker-traefik-portainer` commit, or to redeploy after a var change.
+
+---
+
+## `tf-pve-netbox-ipam`
+
+Hydrates NetBox with "bootstrap infra" (see `IPAM.md`'s "Two allocation paths"): a `RFC1918` RIR, an
+aggregate + prefix + site + `default` role for `172.16.0.0/24`, one IP address object per bootstrap-infra
+host, and one `netbox_ip_range` + matching `netbox_tag` per band in the addressing-scheme table - the tags
+are what let a later module "request" an IP scoped to a specific band (`data "netbox_ip_ranges" { filter {
+name = "tag" ... } }`) rather than drawing from the whole `/24`.
+
+```sh
+cd tf-pve-netbox-ipam
+terraform init -backend-config=backend.local.hcl
+terraform plan  -out=tfplan
+terraform apply tfplan
+```
+
+`local.auto.tfvars` must supply: `infisical_host`/`infisical_project_id`/`infisical_client_id`/`infisical_client_secret` (this module's scoped identity, reading `NETBOX_URL`/`NETBOX_API_TOKEN` from `/shared`).
+
+`hydration.tf` itself is gitignored, not committed - same precedent as `tf-dns-technitium/records.tf`
+(real hostnames/IPs in one file); revisit both together per `IPAM.md`'s "Next steps".
+
+---
+
+## `tf-pve-mcp-agents`
+
+Provisions `docker-mcp-agents` (vm_id `4002`) - the first module whose IP is *requested* from NetBox
+(`netbox_available_ip_address`, scoped to the `reserved-60-99` range's tag) rather than hand-picked, per
+`IPAM.md`'s programmatic-allocation path. Also creates its DNS records: an A record for the host itself,
+plus one A record per MCP service hostname (`ha-mcp`, `unifi-network-mcp`, `unifi-protect-mcp`,
+`unifi-access-mcp`, `truenas-mcp`) - all pointing at the same VM, since its own Caddy reverse-proxies each
+hostname to the right container.
+
+```sh
+cd tf-pve-mcp-agents
+terraform init -backend-config=backend.local.hcl
+terraform plan  -out=tfplan
+terraform apply tfplan
+terraform output instance   # ip/node/vm_id - feed into ansible-pve-mcp-agents' hosts.yml
+```
+
+`local.auto.tfvars` must supply: `lan_domain`, `searchdomain`, `nameservers`, `gateway`, `vm` (an object:
+`vmid`/`name`/`node`/`template`/`sockets`/`cores`/`memory`/`disks` - no `ipaddr`, that's requested from
+NetBox instead), `infisical_host`/`infisical_project_id`/`infisical_client_id`/`infisical_client_secret`
+(this module's scoped identity, reading Technitium's credential from `/tf-dns-technitium` and
+`NETBOX_URL`/`NETBOX_API_TOKEN` from `/shared`), `docker_mcp_agents_domain`, `ha_mcp_domain`,
+`unifi_network_mcp_domain`, `unifi_protect_mcp_domain`, `unifi_access_mcp_domain`, `truenas_mcp_domain`,
+`authorized_github_users`.
+
+**Confirmed live, worth knowing before provisioning any new VM**: on first boot, cloud-init can lose a
+race renaming the interface to `eth0` if DHCP/networkd brings it up under its default name first - the
+correct static netplan config is written either way, it just isn't applied to the live interface, which
+falls back to DHCP (check the DHCP pool, `.101`-`.199`, for the real address). Fix: SSH in via that
+address and run `sudo netplan apply` - renames the interface and switches to the real static address
+immediately, no reboot needed. Not unique to this module.
+
+---
+
+## `ansible-pve-mcp-agents`
+
+```sh
+cd ansible-pve-mcp-agents
+ansible-galaxy collection install -r requirements.yml
+ansible-playbook -i hosts.yml bootstrap.yml --ask-become-pass -e @extra-vars.yml
+```
+
+`bootstrap.yml` chains two playbooks:
+
+1. **`docker-dependencies.yml`** - installs Docker CE + Compose plugin from Docker's own apt repo, plus `git`.
+2. **`deploy.yml`** - clones [`docker-mcp-agents`](https://github.com/homelab-bg/docker-mcp-agents) directly from GitHub (public, unauthenticated HTTPS) and deploys it via `docker compose up -d --build` (build-time-only, no committed image tag to redeploy against). Writes four file-based secrets (`secrets/ha_token.txt`, `secrets/unifi_password.txt`, `secrets/truenas_api_key.txt`, `secrets/aws_credentials`) at `0644` rather than this pipeline's usual `0600` - standalone (non-Swarm) Compose bind-mounts these directly rather than rewrapping them, and each image runs as its own non-root UID that won't generally match the host user's, so owner-only permissions break every image except one whose UID happens to match. Confirmed in `docker-mcp-agents`' own README.
+
+`hosts.yml` needs a `mcp_agents` group with `docker-mcp-agents`'s IP. `extra-vars.yml` must supply: `docker_mcp_agents_version`, `infisical_host`/`infisical_project_id`/`infisical_client_id`/`infisical_client_secret` (this module's scoped identity, reading `HA_TOKEN`/`UNIFI_PASSWORD`/`TRUENAS_API_KEY` from its own `/ansible-pve-mcp-agents` folder and the Route53 DNS-01 credential for the `lan.homelab.green` zone from `/shared`), `homeassistant_url`/`unifi_host`/`unifi_username`/`truenas_url` (non-secret), and `ha_mcp_domain`/`unifi_network_mcp_domain`/`unifi_protect_mcp_domain`/`unifi_access_mcp_domain`/`truenas_mcp_domain`.
+
+No `letsencrypt_email` var - `docker-mcp-agents`' Caddy doesn't set one, same as `docker-infisical`'s (Let's Encrypt only uses it for expiry notices, Caddy works fine without it).
 
 ---
 
@@ -317,8 +399,8 @@ ansible-playbook -i hosts.yml bootstrap.yml --ask-become-pass -e @extra-vars.yml
 
 - **Changed `backend.local.hcl` or the committed backend block** → Terraform will refuse to plan/apply with "Backend initialization required"; re-run `terraform init -reconfigure -backend-config=backend.local.hcl`.
 - **`node_templates` vmids must exist** on their matching Proxmox node before any `tf-pve-*` module can clone from them — run the packer build first.
-- **`vm_id` collisions**: `tf-pve-packer` uses `112`, `tf-pve-template-smoketest` uses `100115`, `tf-pve-docker-green` uses `4001` — check your range doesn't overlap existing VMs.
+- **`vm_id` collisions**: `tf-pve-packer` uses `112`, `tf-pve-template-smoketest` uses `100115`, `tf-pve-docker-green` uses `4001`, `tf-pve-mcp-agents` uses `4002` — check your range doesn't overlap existing VMs.
 - All of the above assumes the state bucket (`terraform-state` in MinIO) already exists — Terraform's S3 backend doesn't create it for you.
 - **`tf-pve-ceph`'s `fs_name`**: double-check `local.auto.tfvars` before every `apply`/`destroy` while iterating — it's the only thing standing between a `cephfs-test` cycle and the real `cephfs` filesystem until `prevent_destroy` is added (see `tf-pve-ceph` section above).
 - **`ansible-pve-docker-green`'s `traefik-portainer.yml`** deploys a pinned release tag of `docker-traefik-portainer` (`docker_traefik_portainer_version`, default set in the playbook) - bump it deliberately in `extra-vars.yml` to move forward, it won't happen on its own.
-- **`cpu.type` is set explicitly to `host` everywhere a VM gets created** (`pkr-pve-templates`, `tf-pve-packer`, `tf-pve-docker-green`, `tf-pve-template-smoketest`) - never leave it unset. `qm create` defaults to `kvm64` and the `bpg/proxmox` Terraform provider defaults to `qemu64` (confirmed via the provider binary's own strings) - neither inherits from a clone source, and both sit below the x86-64-v2 baseline Talos requires, which is what caused the boot loop documented in `pkr-pve-templates` above. Only safe to assume cluster-wide because pve1/pve2/pve3 are identical hardware; revisit if that ever changes.
+- **`cpu.type` is set explicitly to `host` everywhere a VM gets created** (`pkr-pve-templates`, `tf-pve-packer`, `tf-pve-docker-green`, `tf-pve-template-smoketest`, `tf-pve-mcp-agents`) - never leave it unset. `qm create` defaults to `kvm64` and the `bpg/proxmox` Terraform provider defaults to `qemu64` (confirmed via the provider binary's own strings) - neither inherits from a clone source, and both sit below the x86-64-v2 baseline Talos requires, which is what caused the boot loop documented in `pkr-pve-templates` above. Only safe to assume cluster-wide because pve1/pve2/pve3 are identical hardware; revisit if that ever changes.

@@ -1,0 +1,43 @@
+# Copy to local.auto.tfvars and fill in real values - local.auto.tfvars is gitignored
+# and auto-loaded by Terraform, this .example file is committed for reference only.
+
+lan_domain   = "lan.example.internal"
+searchdomain = "example.internal"
+nameservers  = ["10.0.0.2", "10.0.0.3", "10.0.0.4"]
+gateway      = "10.0.0.1"
+
+infisical_host          = "https://secrets.lan.example.com"
+infisical_project_id    = "changeme"
+infisical_client_id     = "changeme"
+infisical_client_secret = "changeme"
+
+docker_mcp_agents_domain  = "docker-mcp-agents.lan.example.green"
+ha_mcp_domain             = "ha-mcp.lan.example.green"
+unifi_network_mcp_domain  = "unifi-network-mcp.lan.example.green"
+unifi_protect_mcp_domain  = "unifi-protect-mcp.lan.example.green"
+unifi_access_mcp_domain   = "unifi-access-mcp.lan.example.green"
+truenas_mcp_domain        = "truenas-mcp.lan.example.green"
+
+authorized_github_users = ["your-github-username"]
+
+vm = {
+  vmid     = 4002
+  name     = "docker-mcp-agents"
+  node     = "pve3"
+  template = 926043
+  sockets  = 1
+  cores    = 2
+  memory   = 8192
+  disks = [
+    {
+      size    = 12
+      storage = "local-zfs"
+      slot    = "virtio0"
+    },
+    {
+      size    = 45
+      storage = "local-zfs"
+      slot    = "virtio1"
+    },
+  ]
+}
