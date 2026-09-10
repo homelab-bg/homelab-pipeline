@@ -269,7 +269,7 @@ Own backend `key` (`homelab/ceph/terraform.tfstate`), independent from every oth
 
 ## `tf-dns-technitium`
 
-Manages standalone Technitium DNS records that don't belong to any other module - `kevynb/technitium` manages records only, not zones, so zone creation itself is a one-time manual step via the Technitium admin console/API. The actual record data lives in `records.tf`, which is gitignored and not templated via a `.example` file (unlike every other module's `local.auto.tfvars` pattern) - there's no good way to genericize real internal DNS topology without defeating the point of having it in Terraform.
+Manages standalone Technitium DNS records that don't belong to any other module - `kevynb/technitium` manages records only, not zones, so zone creation itself is a one-time manual step via the Technitium admin console/API. The actual record data lives in `records.tf` - not templated via a `.example` file (unlike every other module's `local.auto.tfvars` pattern, since there's no good way to genericize real internal DNS topology without defeating the point of having it in Terraform), but still committed - just in `homelab-pipeline-config` (private), symlinked in here the same way as `local.auto.tfvars`.
 
 ```sh
 cd tf-dns-technitium
@@ -337,8 +337,8 @@ terraform apply tfplan
 
 `local.auto.tfvars` must supply: `infisical_host`/`infisical_project_id`/`infisical_client_id`/`infisical_client_secret` (this module's scoped identity, reading `NETBOX_URL`/`NETBOX_API_TOKEN` from `/shared`).
 
-`hydration.tf` itself is gitignored, not committed - same precedent as `tf-dns-technitium/records.tf`
-(real hostnames/IPs in one file); revisit both together per `IPAM.md`'s "Next steps".
+`hydration.tf` itself is committed in `homelab-pipeline-config` (private), symlinked in here - same
+treatment as `tf-dns-technitium/records.tf` (real hostnames/IPs in one file).
 
 ---
 

@@ -11,8 +11,9 @@ override.tf.json
 *_override.tf
 *_override.tf.json
 
-# Real internal topology (real hostnames/IPs) - not committed, matching
-# tf-dns-technitium/records.tf's precedent. Revisit both together once
-# Steve's decided what he wants from this repo long-term (tracked in
-# IPAM.md's "Next steps").
+# Real internal topology (real hostnames/IPs) - not committed HERE; it's a
+# symlink into homelab-pipeline-config (private), same as tf-dns-technitium's
+# records.tf. The symlink itself is machine-local wiring, not portable, so it
+# stays gitignored too - recreate it after a fresh clone:
+#   ln -s ../../homelab-pipeline-config/tf-pve-netbox-ipam/hydration.tf hydration.tf
 hydration.tf

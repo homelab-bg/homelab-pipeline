@@ -247,8 +247,10 @@ redundant, same as `SECRETS.md`'s root-of-trust secrets being kept outside Infis
   a host with no address planned yet, like `mcp-agents` was). `packer-builder` needed a brand-new Infisical
   identity (`tf-pve-packer-reader`, `/shared` read-only) since that module had never used Infisical before;
   `docker-green` reused its existing `tf-pve-docker-green-technitium-reader` identity with an added grant.
-- **Resolve the `records.tf`/`hydration.tf` commit policy** - both are real-topology files currently kept
-  local/gitignored rather than committed, unlike everything else in this repo. Revisit once decided what
-  this repo should do long-term with files that map the full baseline infra in one place.
+- ~~Resolve the `records.tf`/`hydration.tf` commit policy~~ - done: both are now symlinks into
+  `homelab-pipeline-config` (private), with the real content committed there - `records.tf` already worked
+  this way and just had a stale comment; `hydration.tf` has now been moved to match. The symlinks
+  themselves stay gitignored in the public repo (machine-local wiring, recreated after a fresh clone), same
+  as `local.auto.tfvars` everywhere else.
 - Consider modeling the site-to-site VPN overlay as a real NetBox `vpn.Tunnel` object later, once the
   actual UniFi encapsulation/topology is confirmed (currently just a text note - see "Multi-site model").

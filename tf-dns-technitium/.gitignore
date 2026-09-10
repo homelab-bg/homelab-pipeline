@@ -11,8 +11,10 @@ override.tf.json
 *_override.tf
 *_override.tf.json
 
-# Real internal topology (domain, IP assignments) - not templated/committed for
-# now, unlike other modules' local.auto.tfvars pattern, since there's no good
-# way to genericize it without defeating the point of having it in Terraform.
-# Revisit once Steve's decided what he wants from this repo long-term.
+# Real internal topology (domain, IP assignments) - not committed HERE; it's a
+# symlink into homelab-pipeline-config (private), same treatment now also
+# used for tf-pve-netbox-ipam's hydration.tf. The symlink itself is
+# machine-local wiring, not portable, so it stays gitignored too - recreate
+# it after a fresh clone:
+#   ln -s ../../homelab-pipeline-config/tf-dns-technitium/records.tf records.tf
 records.tf
