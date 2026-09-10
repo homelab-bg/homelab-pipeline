@@ -191,7 +191,7 @@ All rows below marked **hydrated** are now live in NetBox (`tf-pve-netbox-ipam`)
 | `.10` | `truenas-bne1` / `minio` / `minio-console` | TrueNAS + MinIO (Terraform state backend) | out of band; DNS records via `tf-dns-technitium`; **hydrated** |
 | `.15` | `secrets` | Infisical (self-hosted secrets manager) | community-scripts (`ct/docker.sh`), no matching `tf-pve-*` module yet; **hydrated** |
 | `.17` | `netbox` | NetBox (this file's own IPAM instance) | `tf-pve-netbox` + `ansible-pve-netbox`; **hydrated** (permanent exception - can't self-register, see "Two allocation paths") |
-| `.40` | `docker-green` | Playground-tier Docker host (Traefik/Portainer) | `tf-pve-docker-green` + `ansible-pve-docker-green` - moved from `.41` on 2026-08-25 to free `.41`-`.43` for k8s workers; **not hydrated** - candidate for its own IPAM section instead |
+| `.40` | `docker-green` | Playground-tier Docker host (Traefik/Portainer) | `tf-pve-docker-green` + `ansible-pve-docker-green` - moved from `.41` on 2026-08-25 to free `.41`-`.43` for k8s workers; **has its own IPAM section**: `netbox_ip_address` with the existing fixed value (`var.vm.ipaddr`), not `netbox_available_ip_address` - this host already had a planned address, unlike `mcp-agents`; not part of the bootstrap-infra hydration |
 | `.60` | `docker-mcp-agents` | MCP servers (HA/UniFi/TrueNAS) + agents for Claude Desktop/Code, behind Caddy | `tf-pve-mcp-agents` + `ansible-pve-mcp-agents` - **first host with its own IPAM section from day one**: requested via `netbox_available_ip_address` scoped to the `reserved-60-99` range's tag, not hand-picked; not part of the bootstrap-infra hydration |
 | `.111` | `jump` | Jump host | out of band; DNS record via `tf-dns-technitium`; sits inside the DHCP pool - see flagged concern above; **hydrated** |
 | `.112` | `packer-builder` | Packer template builder VM | `tf-pve-packer`; sits inside the DHCP pool - see flagged concern above; **not hydrated** - candidate for its own IPAM section instead |
@@ -242,10 +242,10 @@ redundant, same as `SECRETS.md`'s root-of-trust secrets being kept outside Infis
   formula in UniFi, or leave VLAN IDs arbitrary and only use the formula as NetBox documentation.
 - **Confirm the DHCP-pool overlap** (`.111`, `.112`, `.184`, and `mc` at `.101`) - check the router/DHCP
   server for static reservations or exclusions before treating it as safe.
-- **Retrofit `docker-green` and `packer-builder`** with their own "IPAM section" (programmatic allocation
-  via the NetBox provider), per the two-path model above - `docker-mcp-agents` proved this works
-  (`netbox_available_ip_address` scoped to a tagged `netbox_ip_range`, confirmed live), these two are the
-  remaining candidates now that bootstrap infra is hydrated.
+- **Retrofit `packer-builder`** with its own "IPAM section" - `docker-green` is done (see its inventory
+  row above): a plain `netbox_ip_address` for its existing fixed address, not `netbox_available_ip_address`
+  (that path is for a host with no address planned yet, like `mcp-agents` was). `packer-builder` should
+  follow the same declarative pattern, not the claim-next-free one, once picked up.
 - **Resolve the `records.tf`/`hydration.tf` commit policy** - both are real-topology files currently kept
   local/gitignored rather than committed, unlike everything else in this repo. Revisit once decided what
   this repo should do long-term with files that map the full baseline infra in one place.

@@ -9,6 +9,18 @@ locals {
   ])
 }
 
+# Declarative, not netbox_available_ip_address - this host already has a
+# fixed, in-use address (var.vm.ipaddr), unlike tf-pve-mcp-agents which had
+# no specific address planned yet. Registers what's already true rather than
+# claiming a new one; matches IPAM.md's stated preference for hosts with a
+# specific planned address. Gives docker-green its own IPAM section (was
+# previously untracked in NetBox at all - see IPAM.md's "Next steps").
+resource "netbox_ip_address" "docker_green" {
+  ip_address  = "${var.vm.ipaddr}/${var.cidr}"
+  status      = "active"
+  description = "docker-green - tf-pve-docker-green"
+}
+
 resource "proxmox_virtual_environment_vm" "docker" {
   name        = var.vm.name
   description = "${var.vm.name} - cloned from template ${var.vm.template} on ${var.vm.node}, managed by Terraform"
