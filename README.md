@@ -95,7 +95,7 @@ terraform plan  -out=tfplan
 terraform apply tfplan
 ```
 
-`local.auto.tfvars` must supply: `lan_domain`, `searchdomain`, `nameservers`, `gateway`, `ipaddr_network`, `authorized_github_users`. The VM gets a static IP at `<ipaddr_network>.112/<cidr>` (default `cidr = 24`).
+`local.auto.tfvars` must supply: `lan_domain`, `searchdomain`, `nameservers`, `gateway`, `ipaddr_network`, `authorized_github_users`, `infisical_host`/`infisical_project_id`/`infisical_client_id`/`infisical_client_secret` (a new `tf-pve-packer-reader` identity, read-only to `/shared` - reads `NETBOX_URL`/`NETBOX_API_TOKEN` to register its own NetBox IPAM entry). The VM gets a static IP at `<ipaddr_network>.112/<cidr>` (default `cidr = 24`).
 
 No longer a throwaway build host - since it also runs a self-hosted GitHub Actions runner (see `ansible-pve-packer` below), `packer-builder` is now persistent infrastructure, not something to `terraform destroy` after a one-off build.
 

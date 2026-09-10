@@ -7,4 +7,9 @@ nameservers    = ["10.0.0.2", "10.0.0.3", "10.0.0.4"]
 gateway        = "10.0.0.1"
 ipaddr_network = "10.0.0"
 
+infisical_host          = "https://secrets.example.internal"
+infisical_project_id    = "your-infisical-project-id"
+infisical_client_id     = "tf-pve-packer-reader's client ID"
+infisical_client_secret = "tf-pve-packer-reader's client secret"
+
 authorized_github_users = ["your-github-username"]

@@ -10,6 +10,14 @@ terraform {
       source  = "hashicorp/http"
       version = "~> 3.6"
     }
+    infisical = {
+      source  = "infisical/infisical"
+      version = "0.19.24"
+    }
+    netbox = {
+      source  = "e-breuninger/netbox"
+      version = "5.7.0"
+    }
   }
 
   backend "s3" {

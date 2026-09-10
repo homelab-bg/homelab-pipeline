@@ -43,6 +43,27 @@ variable "cloudinit_datastore" {
   default = "local-zfs"
 }
 
+variable "infisical_host" {
+  type        = string
+  description = "Self-hosted Infisical instance URL. No default - supply via a gitignored local.auto.tfvars (see local.auto.tfvars.example)."
+}
+
+variable "infisical_project_id" {
+  type        = string
+  description = "Infisical project ID for homelab-pipeline. No default - supply via a gitignored local.auto.tfvars (see local.auto.tfvars.example)."
+}
+
+variable "infisical_client_id" {
+  type        = string
+  description = "Client ID for this module's scoped Infisical machine identity (tf-pve-packer-reader, read-only to /shared). No default - supply via a gitignored local.auto.tfvars (see local.auto.tfvars.example)."
+}
+
+variable "infisical_client_secret" {
+  type        = string
+  sensitive   = true
+  description = "Client secret for this module's scoped Infisical machine identity. No default - supply via a gitignored local.auto.tfvars (see local.auto.tfvars.example)."
+}
+
 variable "authorized_github_users" {
   type        = list(string)
   description = "GitHub usernames whose public keys get injected into this VM. Set via a gitignored .tfvars or TF_VAR_authorized_github_users - never as a committed default."

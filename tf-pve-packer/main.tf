@@ -9,6 +9,16 @@ locals {
   ])
 }
 
+# Declarative, not netbox_available_ip_address - this host already has a
+# fixed, in-use address, same reasoning as tf-pve-docker-green's own
+# netbox_ip_address resource. Gives packer-builder its own IPAM section
+# (was previously untracked in NetBox entirely - see IPAM.md's "Next steps").
+resource "netbox_ip_address" "packer_builder" {
+  ip_address  = "${var.ipaddr_network}.112/${var.cidr}"
+  status      = "active"
+  description = "packer-builder - tf-pve-packer"
+}
+
 resource "proxmox_virtual_environment_vm" "packer_builder" {
   name        = "packer-builder"
   description = "Dedicated build host for Packer/libguestfs template builds - requires nested virtualization enabled on its node"
