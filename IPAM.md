@@ -189,6 +189,7 @@ All rows below marked **hydrated** are now live in NetBox (`tf-pve-netbox-ipam`)
 | `.1` | (gateway) | Router | out of band, not hydrated (not "our" infra to register) |
 | `.2` / `.3` / `.4` | `ns1` / `ns2` / `ns3` | Technitium DNS (HA cluster) | out of band; DNS records via `tf-dns-technitium`; **hydrated** |
 | `.10` | `truenas-bne1` / `minio` / `minio-console` | TrueNAS + MinIO (Terraform state backend) | out of band; DNS records via `tf-dns-technitium`; **hydrated** |
+| `.12` | `truenas-bne2` | Second TrueNAS unit (backup target) | out of band; DNS records via `tf-dns-technitium`; **hydrated** |
 | `.15` | `secrets` | Infisical (self-hosted secrets manager) | community-scripts (`ct/docker.sh`), no matching `tf-pve-*` module yet; **hydrated** |
 | `.17` | `netbox` | NetBox (this file's own IPAM instance) | `tf-pve-netbox` + `ansible-pve-netbox`; **hydrated** (permanent exception - can't self-register, see "Two allocation paths") |
 | `.40` | `docker-green` | Playground-tier Docker host (Traefik/Portainer) | `tf-pve-docker-green` + `ansible-pve-docker-green` - moved from `.41` on 2026-08-25 to free `.41`-`.43` for k8s workers; **has its own IPAM section**: `netbox_ip_address` with the existing fixed value (`var.vm.ipaddr`), not `netbox_available_ip_address` - this host already had a planned address, unlike `mcp-agents`; not part of the bootstrap-infra hydration |
