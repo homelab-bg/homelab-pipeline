@@ -7,7 +7,7 @@ the allocation policy, the SOP for claiming a new address, and a manually-kept s
 reference.
 
 **NetBox is partially populated.** Site `steve`'s "bootstrap infra" (see below) has been hydrated via the
-[`tf-pve-netbox-ipam`](tf-pve-netbox-ipam/) module - RIR, aggregate, site, `default` role, the
+[`tf-pve-netbox-ipam`](tf-pve-netbox-ipam/) module - RIR, aggregate, site, `local` role, the
 `172.16.0.0/24` prefix, and one IP address object per bootstrap-infra host. Nothing else yet: the other
 two sites (`mum-and-dad`, `dan`), the `iot`/`camera`/`guest` roles, and every workload module's own IP
 (docker-green, packer-builder, the future k8s module) are still only recorded in this file, not NetBox.
@@ -27,27 +27,29 @@ consistent subnet/VLAN numbering scheme across all three.
 | Dan | `dan` | 16 |
 
 **Roles** (NetBox `Role` objects, created once, shared across all three sites' matching prefixes):
-`default`, `iot`, `camera`, `guest`, `management`.
+`local`, `iot`, `camera`, `guest`, `management`. `local` is named to match its real UniFi network name
+directly (see below) - it was originally called `default`, renamed once the VLAN 1/`management` design
+below made clear that kept confusing "the role" with "UniFi's actual network named Default".
 
 **Subnets** (site-scoped prefixes, no VRF - the three networks are physically separate/non-overlapping by
 construction, so there's no address-space conflict a VRF exists to solve):
 
 | Role | Formula | 14 (steve) | 15 (mum-and-dad) | 16 (dan) |
 |---|---|---|---|---|
-| default | `172.16.<id>.0/24` | `.14.0/24` | `.15.0/24` | `.16.0/24` |
+| local | `172.16.<id>.0/24` | `.14.0/24` | `.15.0/24` | `.16.0/24` |
 | iot | `192.168.<id>.0/24` | `.14.0/24` | `.15.0/24` | `.16.0/24` |
 | camera | `10.0.<id>.0/24` | `.14.0/24` | `.15.0/24` | `.16.0/24` |
 | guest | `192.168.199.0/24` (same everywhere - isolated, internet-only, never bridged) | same | same | same |
 | management | `172.16.1.0/24` (same everywhere - infra-only, never bridged, never routed to the VPN overlay) | same | same | same |
 
-**VLAN IDs** (not yet applied in UniFi for `default`/`iot`/`camera`/`guest` - currently arbitrary
+**VLAN IDs** (not yet applied in UniFi for `local`/`iot`/`camera`/`guest` - currently arbitrary
 `1`/`2`/`3`/`4` tags; whether to actually retag to match this formula is still an open decision, not
 needed to use NetBox/IPAM in the meantime. `management`'s VLAN 1 is the one exception - not a formula
 choice, a hard constraint, see below):
 
 | Role | Formula | 14 | 15 | 16 |
 |---|---|---|---|---|
-| default | `<id>` | 14 | 15 | 16 |
+| local | `<id>` | 14 | 15 | 16 |
 | iot | `100 + <id>` | 114 | 115 | 116 |
 | camera | `200 + <id>` | 214 | 215 | 216 |
 | guest | fixed `199` (shared, matches the shared subnet) | 199 | 199 | 199 |
@@ -56,29 +58,29 @@ choice, a hard constraint, see below):
 **Why `management` exists as its own role**: VLAN 1 is 802.1Q's native/untagged VLAN and UniFi's
 own built-in `Default` network sits on it - client traffic doesn't belong there (standard practice,
 independent of anything UniFi-specific: VLAN 1 carries untagged infrastructure protocol traffic by
-default and is the classic VLAN-hopping target). So rather than retag `default` onto VLAN 1's spot and
+default and is the classic VLAN-hopping target). So rather than retag `local` onto VLAN 1's spot and
 leave the old separate `management` VLAN idle (the original plan), VLAN 1 itself becomes the permanent
 `management` role - infra/adoption traffic only, IPv4-only (no IPv6 planned for it, see the IPv6
 addendum), never bridged across the VPN overlay. See "Steve's site (14)" below for how this actually gets
 migrated.
 
-**UniFi network name vs. IPAM role name - these diverge on purpose for `management`**: UniFi's built-in
-`Default` network object is being *repurposed* to carry the `management` role, not renamed away - this
-avoids touching whatever UniFi's own adoption/provisioning logic assumes about a network literally named
-`Default`. The network that actually carries the `default` *role*'s real client traffic gets a new UniFi
-display name instead (`Local`), even though this document keeps
-calling that role `default` throughout. Don't confuse "the network named `Default` in the UniFi UI" with
-"the `default` role" when cross-referencing a live config against this file.
+**UniFi network name vs. IPAM role name - these still diverge for `management`, deliberately**: UniFi's
+built-in `Default` network object is being *repurposed* to carry the `management` role, not renamed away
+- this avoids touching whatever UniFi's own adoption/provisioning logic assumes about a network literally
+named `Default`. `local` doesn't have this problem (its UniFi display name is also `Local` - see "Steve's
+site (14)" below) - `management` is the one remaining case where "the network named `Default` in the
+UniFi UI" and "the role documented here" are two different things. Worth remembering when
+cross-referencing a live config against this file.
 
-**Site-to-site VPN overlay**: UniFi provides a VPN overlay connecting each site's **default** network to
-the others (remote access from any site's default network to any other's). This is why the default-role
+**Site-to-site VPN overlay**: UniFi provides a VPN overlay connecting each site's **local** network to
+the others (remote access from any site's local network to any other's). This is why the local-role
 subnets specifically need to be unique per site - it's what makes flat routing across the overlay work
-without renumbering. Recorded as a plain-text note on each default-network prefix's description, not
+without renumbering. Recorded as a plain-text note on each local-network prefix's description, not
 modeled as a NetBox `vpn.Tunnel` object (NetBox 4.6.8 has native Tunnel/TunnelTermination support,
 confirmed against its live API schema, but modeling it properly needs to know the actual
 encapsulation/topology UniFi uses underneath - deferred until that's worked out). Site Magic's tunnel is
 configured by selecting which networks participate, not tied to a fixed VLAN ID (confirmed) - migrating
-`default` off VLAN 1 is a matter of selecting the new network and deselecting the old one, not a
+`local` off VLAN 1 is a matter of selecting the new network and deselecting the old one, not a
 structural blocker.
 
 **`site_id` custom field gotcha**: created as an `integer` type first, which failed - the NetBox Terraform
@@ -128,13 +130,13 @@ they look like. GUA: `<site GUA48>:<vlan>::/64`; ULA: `<ULA48>:<vlan>::/64`.
 
 | Role | VLAN (14/15/16) | GUA | ULA |
 |---|---|---|---|
-| default | 14/15/16 | yes | yes |
+| local | 14/15/16 | yes | yes |
 | iot | 114/115/116 | no | yes |
 | camera | 214/215/216 | no | yes (or leave v4-only, see open items) |
 | guest | 199 | yes | no |
 
 Guest gets GUA but not ULA - it's internet-only and isolated by design (never talks to anything
-internal), so a stable internal-only address is pointless for it; default gets both since it needs
+internal), so a stable internal-only address is pointless for it; local gets both since it needs
 internet reachability *and* a stable address that survives ABB reassigning the delegated `/48`. IoT and
 camera both stay ULA-only (decided - see former open item 4 below): outbound is default-denied on IoT
 regardless, and any device that genuinely needs internet access keeps using its existing v4 path instead
@@ -195,38 +197,38 @@ doesn't exist across sites (Site Magic is v4-only, see "Status" above).
 2. **Validate the IoT default-deny-outbound firewall policy on v4** - apply it, work through the actual
    exception list (Shelly and anything else currently phoning home), confirm nothing breaks. Deliberately
    proven on v4 first, one well-understood stack, before adding v6 into the mix.
-3. **Enable IPv6 local-only** - ULA addressing via SLAAC across VLANs, no WAN prefix delegation and no
+3. **Enable IPv6 ULA-only** - ULA addressing via SLAAC across VLANs, no WAN prefix delegation and no
    GUA yet. Validates DNS/SLAAC/firewall-mirroring behavior internally without adding any new
    internet-facing exposure - deliberate choice, not wanting to double the exposure surface before the v4
    firewall-rule model (step 2) is proven.
 4. **Enable WAN v6** (PD + GUA) at steve's site, trial on one lab VLAN first. IoT and camera stay
-   ULA-only at this step and beyond (decided - see open item 4 above) - only default and guest get GUA.
+   ULA-only at this step and beyond (decided - see open item 4 above) - only local and guest get GUA.
 5. **Roll out remaining networks at steve's, then mum-and-dad's, then dan's.**
 
 ## Steve's site (14): current addressing, not yet migrated
 
 Steve's network needs reallocation to fit the scheme above - none of this has happened yet, only the
-*default* network's current (unmigrated) state has been hydrated into NetBox:
+*local* network's current (unmigrated) state has been hydrated into NetBox:
 
 | Role | Current | Target |
 |---|---|---|
-| default | `172.16.0.0/24`, VLAN 1 (UniFi's built-in `Default` network) | `172.16.14.0/24`, VLAN 14, on a **new** UniFi network object named `Local` |
+| local | `172.16.0.0/24`, VLAN 1 (UniFi's built-in `Default` network) | `172.16.14.0/24`, VLAN 14, on a **new** UniFi network object named `Local` |
 | iot | `172.16.2.0/24` | `192.168.14.0/24` |
 | camera | none | `10.0.14.0/24` (new) |
 | guest | `172.16.199.0/24` | `192.168.199.0/24` (shared with the other two sites) |
-| management | `172.16.1.0/24`, separate unused VLAN | `172.16.1.0/24`, VLAN 1 - repurposed from the built-in `Default` object once `default` moves off it |
+| management | `172.16.1.0/24`, separate unused VLAN | `172.16.1.0/24`, VLAN 1 - repurposed from the built-in `Default` object once `local` moves off it |
 
-**`default` and `management` swap roles rather than either simply being retired.** UniFi's built-in
-`Default` network object currently carries real client traffic (today's `default` role) on VLAN 1 - it
+**`local` and `management` swap roles rather than either simply being retired.** UniFi's built-in
+`Default` network object currently carries real client traffic (today's `local` role) on VLAN 1 - it
 gets repurposed to carry `management` instead, keeping its UniFi display name `Default` unchanged (see
 the naming gotcha in "Multi-site model" above) but re-IP'd onto `172.16.1.0/24`. The separate,
 already-existing, already-unused `management`-tagged VLAN gets deleted once that happens - its job is now
 done by the repurposed built-in object, and its reserved `172.16.1.0/24` address is what that object
-adopts, so no new address space is needed. Real client (`default`-role) traffic moves onto a **new**
-UniFi network object on VLAN 14 named `Local` - deliberately not `Default`, to avoid
-confusion with the now-management-only built-in network of that name. Site Magic's tunnel selection needs
-updating in the same pass (see "Multi-site model" above - confirmed to be a config change, not a
-structural blocker).
+adopts, so no new address space is needed. Real client (`local`-role) traffic moves onto a **new**
+UniFi network object on VLAN 14 named `Local` - matching its role name exactly, and deliberately not
+`Default`, to avoid confusion with the now-management-only built-in network of that name. Site Magic's
+tunnel selection needs updating in the same pass (see "Multi-site model" above - confirmed to be a config
+change, not a structural blocker).
 
 ### Addressing scheme (current `172.16.0.0/24`, before migration)
 
@@ -273,7 +275,7 @@ model" above.
 IP's last octet where practical. Not retrofitted onto pre-existing hosts that don't already follow it.
 
 **Description convention** for each IP address/prefix object: `<hostname-or-site>-<role-or-consumer>`,
-e.g. `netbox - bootstrap infra`, `steve-default`, so the reverse lookup from NetBox back to the owning
+e.g. `netbox - bootstrap infra`, `steve-local`, so the reverse lookup from NetBox back to the owning
 module/repo doesn't require guessing.
 
 **One `netbox_ip_range` + matching `netbox_tag` per band** in the addressing-scheme table below (see
@@ -383,18 +385,19 @@ redundant, same as `SECRETS.md`'s root-of-trust secrets being kept outside Infis
 
 ## Next steps
 
-- **Priority 1: migrate steve's site** to the target scheme: default `172.16.0.0/24` →
-  `172.16.14.0/24`, iot `172.16.2.0/24` → `192.168.14.0/24`, guest `172.16.199.0/24` →
-  `192.168.199.0/24` (shared), retire the unused `management` VLAN, add a `camera` network
-  (`10.0.14.0/24`) if/when cameras are added. Hard prerequisite for the IPv6 addendum's rollout below -
-  the v6 subnet IDs are derived from these v4-target VLAN IDs.
+- **Priority 1: migrate steve's site** to the target scheme: local `172.16.0.0/24` → `172.16.14.0/24`
+  (moving off VLAN 1 onto a new `Local` network - see "Steve's site (14)" below), iot `172.16.2.0/24` →
+  `192.168.14.0/24`, guest `172.16.199.0/24` → `192.168.199.0/24` (shared), repurpose VLAN 1 as the
+  permanent `management` role rather than retiring it, add a `camera` network (`10.0.14.0/24`) if/when
+  cameras are added. Hard prerequisite for the IPv6 addendum's rollout below - the v6 subnet IDs are
+  derived from these v4-target VLAN IDs.
 - **Priority 2: apply the IoT default-deny-outbound firewall policy** (v4 first) - see the IPv6
   addendum's "Firewall" and "Rollout order" sections above for the full policy and why it's sequenced
   before any v6 exposure.
-- **Priority 3: enable IPv6, local-only first** (ULA via SLAAC, no WAN prefix delegation/GUA yet) - see
+- **Priority 3: enable IPv6, ULA-only first** (ULA via SLAAC, no WAN prefix delegation/GUA yet) - see
   the IPv6 addendum above for the full scheme; WAN v6 (PD + GUA) comes only after steps 1-2 are proven
   and open item 4 (whether IoT needs a GUA at all) is decided.
-- **Build out `mum-and-dad` (15) and `dan` (16)** in NetBox - sites, plus their `default`/`iot`/`camera`
+- **Build out `mum-and-dad` (15) and `dan` (16)** in NetBox - sites, plus their `local`/`iot`/`camera`
   prefixes and the shared `guest` prefix.
 - **Decide on UniFi VLAN retagging** - whether to actually apply the `<id>`/`100+<id>`/`200+<id>`/`199`
   formula in UniFi, or leave VLAN IDs arbitrary and only use the formula as NetBox documentation.
