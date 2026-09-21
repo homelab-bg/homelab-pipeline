@@ -9,7 +9,7 @@ reference.
 **NetBox is partially populated.** Site `steve`'s "bootstrap infra" (see below) has been hydrated via the
 [`tf-pve-netbox-ipam`](tf-pve-netbox-ipam/) module - RIR, aggregate, site, `local` role, the
 `172.16.0.0/24` prefix, and one IP address object per bootstrap-infra host. Nothing else yet: the other
-two sites (`mum-and-dad`, `dan`), the `iot`/`camera`/`guest` roles, and every workload module's own IP
+two sites (`mum-and-dad`, `dan`), the `iot`/`security`/`guest` roles, and every workload module's own IP
 (docker-green, packer-builder, the future k8s module) are still only recorded in this file, not NetBox.
 
 ## Multi-site model
@@ -27,9 +27,11 @@ consistent subnet/VLAN numbering scheme across all three.
 | Dan | `dan` | 16 |
 
 **Roles** (NetBox `Role` objects, created once, shared across all three sites' matching prefixes):
-`local`, `iot`, `camera`, `guest`, `management`. `local` is named to match its real UniFi network name
+`local`, `iot`, `security`, `guest`, `management`. `local` is named to match its real UniFi network name
 directly (see below) - it was originally called `default`, renamed once the VLAN 1/`management` design
-below made clear that kept confusing "the role" with "UniFi's actual network named Default".
+below made clear that kept confusing "the role" with "UniFi's actual network named Default". `security`
+was originally called `camera` - renamed once the Bosch alarm and UniFi Access hardware were planned for
+the same network (see "Why `security` is one network" below).
 
 **Subnets** (site-scoped prefixes, no VRF - the three networks are physically separate/non-overlapping by
 construction, so there's no address-space conflict a VRF exists to solve):
@@ -38,11 +40,11 @@ construction, so there's no address-space conflict a VRF exists to solve):
 |---|---|---|---|---|
 | local | `172.16.<id>.0/24` | `.14.0/24` | `.15.0/24` | `.16.0/24` |
 | iot | `192.168.<id>.0/24` | `.14.0/24` | `.15.0/24` | `.16.0/24` |
-| camera | `10.0.<id>.0/24` | `.14.0/24` | `.15.0/24` | `.16.0/24` |
+| security | `10.0.<id>.0/24` | `.14.0/24` | `.15.0/24` | `.16.0/24` |
 | guest | `192.168.199.0/24` (same everywhere - isolated, internet-only, never bridged) | same | same | same |
 | management | `172.16.1.0/24` (same everywhere - infra-only, never bridged, never routed to the VPN overlay) | same | same | same |
 
-**VLAN IDs** (not yet applied in UniFi for `local`/`iot`/`camera`/`guest` - currently arbitrary
+**VLAN IDs** (not yet applied in UniFi for `local`/`iot`/`security`/`guest` - currently arbitrary
 `1`/`2`/`3`/`4` tags; whether to actually retag to match this formula is still an open decision, not
 needed to use NetBox/IPAM in the meantime. `management`'s VLAN 1 is the one exception - not a formula
 choice, a hard constraint, see below):
@@ -51,7 +53,7 @@ choice, a hard constraint, see below):
 |---|---|---|---|---|
 | local | `<id>` | 14 | 15 | 16 |
 | iot | `100 + <id>` | 114 | 115 | 116 |
-| camera | `200 + <id>` | 214 | 215 | 216 |
+| security | `200 + <id>` | 214 | 215 | 216 |
 | guest | fixed `199` (shared, matches the shared subnet) | 199 | 199 | 199 |
 | management | fixed `1` (UniFi's native/untagged VLAN - not site-specific, same reasoning as guest's fixed `199`) | 1 | 1 | 1 |
 
@@ -63,6 +65,19 @@ leave the old separate `management` VLAN idle (the original plan), VLAN 1 itself
 `management` role - infra/adoption traffic only, IPv4-only (no IPv6 planned for it, see the IPv6
 addendum), never bridged across the VPN overlay. See "Steve's site (14)" below for how this actually gets
 migrated.
+
+**Why `security` is one network, not separate camera/alarm/access networks**: it carries the UniFi Protect
+cameras, the Bosch alarm panel, and the upcoming UniFi Access hardware (hub, readers). The deciding
+constraint is physical: Access devices can't have their ports tagged, so anything plugged into one
+(e.g. the front-door camera that is also a reader) lands on whatever VLAN the Access device itself sits
+on - meaning the switch port for an Access device has to carry `security` as its native/untagged VLAN,
+and any camera hanging off it inherits that too. Splitting Access onto its own network would therefore
+put some cameras on the Access network by necessity, fragmenting the very segmentation the split was
+meant to create. Beyond that, the trust profile is the same for all three: locally-managed devices (UDM /
+Home Assistant) that shouldn't need internet access by default. Revisit if that stops being true - e.g.
+if the Bosch panel turns out to need a lot of outbound access that cameras don't, or if isolating the
+alarm panel from a compromised camera becomes a priority (the split would then be alarm-vs-everything-
+else, not cameras-vs-Access).
 
 **UniFi network name vs. IPAM role name - these still diverge for `management`, deliberately**: UniFi's
 built-in `Default` network object is being *repurposed* to carry the `management` role, not renamed away
@@ -132,13 +147,13 @@ they look like. GUA: `<site GUA48>:<vlan>::/64`; ULA: `<ULA48>:<vlan>::/64`.
 |---|---|---|---|
 | local | 14/15/16 | yes | yes |
 | iot | 114/115/116 | no | yes |
-| camera | 214/215/216 | no | yes (or leave v4-only, see open items) |
+| security | 214/215/216 | no | yes (or leave v4-only, see open items) |
 | guest | 199 | yes | no |
 
 Guest gets GUA but not ULA - it's internet-only and isolated by design (never talks to anything
 internal), so a stable internal-only address is pointless for it; local gets both since it needs
 internet reachability *and* a stable address that survives ABB reassigning the delegated `/48`. IoT and
-camera both stay ULA-only (decided - see former open item 4 below): outbound is default-denied on IoT
+security both stay ULA-only (decided - see former open item 4 below): outbound is default-denied on IoT
 regardless, and any device that genuinely needs internet access keeps using its existing v4 path instead
 of needing a v6-specific firewall exception built for it - FW rules for those exceptions stay managed
 over v4 connectivity, not v6. `management` isn't part of this rollout at all - staying IPv4-only (decided
@@ -178,14 +193,17 @@ doesn't exist across sites (Site Magic is v4-only, see "Status" above).
 1. Does UniFi's Prefix ID field accept 4-digit IDs (e.g. `0214`)? If it's only 8-bit, every subnet ID in
    this scheme (max `216`) still fits in a single byte, so the scheme survives either way - but confirm
    against the actual UDM firmware before relying on that assumption.
-2. Can a camera VLAN be ULA-only (no GUA advertised at all)? Yes - an interface with only a ULA prefix
+2. Can the security VLAN be ULA-only (no GUA advertised at all)? Yes - an interface with only a ULA prefix
    in its RA is a normal, fully-supported IPv6 configuration; devices get ULA + link-local and nothing
-   else. Not blocked on anything, just needs the camera VLAN's RA to omit the GUA prefix.
+   else. Not blocked on anything, just needs the security VLAN's RA to omit the GUA prefix. Still worth
+   checking before enabling ULA there: how the Bosch alarm panel and UniFi Access hardware actually behave
+   with IPv6 (not verified) - leaving `security` v4-only until there's a reason to dual-stack it remains an
+   option, same as `management`.
 3. Dan's delegated prefix - confirm PD is actually offered on that specific ABB personal-plan tier (not
    just its size) before assuming `/48`; some residential tiers do CGNAT-v4 with no PD at all rather than
    full delegation.
 4. ~~Given the IoT default-deny-outbound policy above, does IoT still need a GUA at all?~~ - decided:
-   IoT stays ULA-only, same as camera. Exceptions (e.g. a Shelly relay that still needs real internet
+   IoT stays ULA-only, same as security. Exceptions (e.g. a Shelly relay that still needs real internet
    access) get their firewall rules managed over v4 connectivity, not v6 - avoids building any
    v6-specific outbound exception at all. Reflected in the subnet-ID table above.
 
@@ -201,7 +219,7 @@ doesn't exist across sites (Site Magic is v4-only, see "Status" above).
    GUA yet. Validates DNS/SLAAC/firewall-mirroring behavior internally without adding any new
    internet-facing exposure - deliberate choice, not wanting to double the exposure surface before the v4
    firewall-rule model (step 2) is proven.
-4. **Enable WAN v6** (PD + GUA) at steve's site, trial on one lab VLAN first. IoT and camera stay
+4. **Enable WAN v6** (PD + GUA) at steve's site, trial on one lab VLAN first. IoT and security stay
    ULA-only at this step and beyond (decided - see open item 4 above) - only local and guest get GUA.
 5. **Roll out remaining networks at steve's, then mum-and-dad's, then dan's.**
 
@@ -214,7 +232,7 @@ Steve's network needs reallocation to fit the scheme above - none of this has ha
 |---|---|---|
 | local | `172.16.0.0/24`, VLAN 1 (UniFi's built-in `Default` network) | `172.16.14.0/24`, VLAN 14, on a **new** UniFi network object named `Local` |
 | iot | `172.16.2.0/24` | `192.168.14.0/24` |
-| camera | none | `10.0.14.0/24` (new) |
+| security | none | `10.0.14.0/24` (new) - cameras, Bosch alarm, UniFi Access hardware |
 | guest | `172.16.199.0/24` | `192.168.199.0/24` (shared with the other two sites) |
 | management | `172.16.1.0/24`, separate unused VLAN | `172.16.1.0/24`, VLAN 1 - repurposed from the built-in `Default` object once `local` moves off it |
 
@@ -388,16 +406,16 @@ redundant, same as `SECRETS.md`'s root-of-trust secrets being kept outside Infis
 - **Priority 1: migrate steve's site** to the target scheme: local `172.16.0.0/24` → `172.16.14.0/24`
   (moving off VLAN 1 onto a new `Local` network - see "Steve's site (14)" below), iot `172.16.2.0/24` →
   `192.168.14.0/24`, guest `172.16.199.0/24` → `192.168.199.0/24` (shared), repurpose VLAN 1 as the
-  permanent `management` role rather than retiring it, add a `camera` network (`10.0.14.0/24`) if/when
-  cameras are added. Hard prerequisite for the IPv6 addendum's rollout below - the v6 subnet IDs are
-  derived from these v4-target VLAN IDs.
+  permanent `management` role rather than retiring it, add a `security` network (`10.0.14.0/24`) for
+  the cameras, Bosch alarm and (once installed) UniFi Access hardware. Hard prerequisite for the IPv6
+  addendum's rollout below - the v6 subnet IDs are derived from these v4-target VLAN IDs.
 - **Priority 2: apply the IoT default-deny-outbound firewall policy** (v4 first) - see the IPv6
   addendum's "Firewall" and "Rollout order" sections above for the full policy and why it's sequenced
   before any v6 exposure.
 - **Priority 3: enable IPv6, ULA-only first** (ULA via SLAAC, no WAN prefix delegation/GUA yet) - see
   the IPv6 addendum above for the full scheme; WAN v6 (PD + GUA) comes only after steps 1-2 are proven
   and open item 4 (whether IoT needs a GUA at all) is decided.
-- **Build out `mum-and-dad` (15) and `dan` (16)** in NetBox - sites, plus their `local`/`iot`/`camera`
+- **Build out `mum-and-dad` (15) and `dan` (16)** in NetBox - sites, plus their `local`/`iot`/`security`
   prefixes and the shared `guest` prefix.
 - **Decide on UniFi VLAN retagging** - whether to actually apply the `<id>`/`100+<id>`/`200+<id>`/`199`
   formula in UniFi, or leave VLAN IDs arbitrary and only use the formula as NetBox documentation.
