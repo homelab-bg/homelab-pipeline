@@ -27,7 +27,7 @@ consistent subnet/VLAN numbering scheme across all three.
 | Dan | `dan` | 16 |
 
 **Roles** (NetBox `Role` objects, created once, shared across all three sites' matching prefixes):
-`default`, `iot`, `camera`, `guest`.
+`default`, `iot`, `camera`, `guest`, `management`.
 
 **Subnets** (site-scoped prefixes, no VRF - the three networks are physically separate/non-overlapping by
 construction, so there's no address-space conflict a VRF exists to solve):
@@ -38,9 +38,12 @@ construction, so there's no address-space conflict a VRF exists to solve):
 | iot | `192.168.<id>.0/24` | `.14.0/24` | `.15.0/24` | `.16.0/24` |
 | camera | `10.0.<id>.0/24` | `.14.0/24` | `.15.0/24` | `.16.0/24` |
 | guest | `192.168.199.0/24` (same everywhere - isolated, internet-only, never bridged) | same | same | same |
+| management | `172.16.1.0/24` (same everywhere - infra-only, never bridged, never routed to the VPN overlay) | same | same | same |
 
-**VLAN IDs** (not yet applied in UniFi - currently arbitrary `1`/`2`/`3`/`4` tags; whether to actually
-retag to match this formula is still an open decision, not needed to use NetBox/IPAM in the meantime):
+**VLAN IDs** (not yet applied in UniFi for `default`/`iot`/`camera`/`guest` - currently arbitrary
+`1`/`2`/`3`/`4` tags; whether to actually retag to match this formula is still an open decision, not
+needed to use NetBox/IPAM in the meantime. `management`'s VLAN 1 is the one exception - not a formula
+choice, a hard constraint, see below):
 
 | Role | Formula | 14 | 15 | 16 |
 |---|---|---|---|---|
@@ -48,6 +51,24 @@ retag to match this formula is still an open decision, not needed to use NetBox/
 | iot | `100 + <id>` | 114 | 115 | 116 |
 | camera | `200 + <id>` | 214 | 215 | 216 |
 | guest | fixed `199` (shared, matches the shared subnet) | 199 | 199 | 199 |
+| management | fixed `1` (UniFi's native/untagged VLAN - not site-specific, same reasoning as guest's fixed `199`) | 1 | 1 | 1 |
+
+**Why `management` exists as its own role**: VLAN 1 is 802.1Q's native/untagged VLAN and UniFi's
+own built-in `Default` network sits on it - client traffic doesn't belong there (standard practice,
+independent of anything UniFi-specific: VLAN 1 carries untagged infrastructure protocol traffic by
+default and is the classic VLAN-hopping target). So rather than retag `default` onto VLAN 1's spot and
+leave the old separate `management` VLAN idle (the original plan), VLAN 1 itself becomes the permanent
+`management` role - infra/adoption traffic only, IPv4-only (no IPv6 planned for it, see the IPv6
+addendum), never bridged across the VPN overlay. See "Steve's site (14)" below for how this actually gets
+migrated.
+
+**UniFi network name vs. IPAM role name - these diverge on purpose for `management`**: UniFi's built-in
+`Default` network object is being *repurposed* to carry the `management` role, not renamed away - this
+avoids touching whatever UniFi's own adoption/provisioning logic assumes about a network literally named
+`Default`. The network that actually carries the `default` *role*'s real client traffic gets a new UniFi
+display name instead (`Internal` or `Local` - exact name still TBD), even though this document keeps
+calling that role `default` throughout. Don't confuse "the network named `Default` in the UniFi UI" with
+"the `default` role" when cross-referencing a live config against this file.
 
 **Site-to-site VPN overlay**: UniFi provides a VPN overlay connecting each site's **default** network to
 the others (remote access from any site's default network to any other's). This is why the default-role
@@ -55,7 +76,10 @@ subnets specifically need to be unique per site - it's what makes flat routing a
 without renumbering. Recorded as a plain-text note on each default-network prefix's description, not
 modeled as a NetBox `vpn.Tunnel` object (NetBox 4.6.8 has native Tunnel/TunnelTermination support,
 confirmed against its live API schema, but modeling it properly needs to know the actual
-encapsulation/topology UniFi uses underneath - deferred until that's worked out).
+encapsulation/topology UniFi uses underneath - deferred until that's worked out). Site Magic's tunnel is
+configured by selecting which networks participate, not tied to a fixed VLAN ID (confirmed) - migrating
+`default` off VLAN 1 is a matter of selecting the new network and deselecting the old one, not a
+structural blocker.
 
 **`site_id` custom field gotcha**: created as an `integer` type first, which failed - the NetBox Terraform
 provider's `custom_fields` argument always sends values as strings, and NetBox's own validation rejects a
@@ -115,7 +139,9 @@ internet reachability *and* a stable address that survives ABB reassigning the d
 camera both stay ULA-only (decided - see former open item 4 below): outbound is default-denied on IoT
 regardless, and any device that genuinely needs internet access keeps using its existing v4 path instead
 of needing a v6-specific firewall exception built for it - FW rules for those exceptions stay managed
-over v4 connectivity, not v6.
+over v4 connectivity, not v6. `management` isn't part of this rollout at all - staying IPv4-only (decided
+- see "Multi-site model" above), no GUA or ULA; nothing about a pure infra/adoption VLAN needs
+dual-stacking.
 
 ### UniFi implementation
 
@@ -184,13 +210,23 @@ Steve's network needs reallocation to fit the scheme above - none of this has ha
 
 | Role | Current | Target |
 |---|---|---|
-| default | `172.16.0.0/24` (hydrated into NetBox as-is) | `172.16.14.0/24` |
+| default | `172.16.0.0/24`, VLAN 1 (UniFi's built-in `Default` network) | `172.16.14.0/24`, VLAN 14, on a **new** UniFi network object (display name TBD - `Internal`/`Local`) |
 | iot | `172.16.2.0/24` | `192.168.14.0/24` |
 | camera | none | `10.0.14.0/24` (new) |
 | guest | `172.16.199.0/24` | `192.168.199.0/24` (shared with the other two sites) |
+| management | `172.16.1.0/24`, separate unused VLAN | `172.16.1.0/24`, VLAN 1 - repurposed from the built-in `Default` object once `default` moves off it |
 
-A fourth VLAN, `management` (`172.16.1.0/24`, never used), doesn't correspond to any of the 4 subnet
-roles above and is being retired rather than migrated.
+**`default` and `management` swap roles rather than either simply being retired.** UniFi's built-in
+`Default` network object currently carries real client traffic (today's `default` role) on VLAN 1 - it
+gets repurposed to carry `management` instead, keeping its UniFi display name `Default` unchanged (see
+the naming gotcha in "Multi-site model" above) but re-IP'd onto `172.16.1.0/24`. The separate,
+already-existing, already-unused `management`-tagged VLAN gets deleted once that happens - its job is now
+done by the repurposed built-in object, and its reserved `172.16.1.0/24` address is what that object
+adopts, so no new address space is needed. Real client (`default`-role) traffic moves onto a **new**
+UniFi network object on VLAN 14 with a display name still TBD - deliberately not `Default`, to avoid
+confusion with the now-management-only built-in network of that name. Site Magic's tunnel selection needs
+updating in the same pass (see "Multi-site model" above - confirmed to be a config change, not a
+structural blocker).
 
 ### Addressing scheme (current `172.16.0.0/24`, before migration)
 
