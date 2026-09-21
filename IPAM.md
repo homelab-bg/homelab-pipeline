@@ -105,13 +105,17 @@ they look like. GUA: `<site GUA48>:<vlan>::/64`; ULA: `<ULA48>:<vlan>::/64`.
 | Role | VLAN (14/15/16) | GUA | ULA |
 |---|---|---|---|
 | default | 14/15/16 | yes | yes |
-| iot | 114/115/116 | yes | yes |
+| iot | 114/115/116 | no | yes |
 | camera | 214/215/216 | no | yes (or leave v4-only, see open items) |
 | guest | 199 | yes | no |
 
 Guest gets GUA but not ULA - it's internet-only and isolated by design (never talks to anything
-internal), so a stable internal-only address is pointless for it; default and iot get both since they
-need internet reachability *and* a stable address that survives ABB reassigning the delegated `/48`.
+internal), so a stable internal-only address is pointless for it; default gets both since it needs
+internet reachability *and* a stable address that survives ABB reassigning the delegated `/48`. IoT and
+camera both stay ULA-only (decided - see former open item 4 below): outbound is default-denied on IoT
+regardless, and any device that genuinely needs internet access keeps using its existing v4 path instead
+of needing a v6-specific firewall exception built for it - FW rules for those exceptions stay managed
+over v4 connectivity, not v6.
 
 ### UniFi implementation
 
@@ -152,11 +156,10 @@ doesn't exist across sites (Site Magic is v4-only, see "Status" above).
 3. Dan's delegated prefix - confirm PD is actually offered on that specific ABB personal-plan tier (not
    just its size) before assuming `/48`; some residential tiers do CGNAT-v4 with no PD at all rather than
    full delegation.
-4. **Given the IoT default-deny-outbound policy above, does IoT still need a GUA at all?** With outbound
-   denied by default and exceptions added per-device, IoT could plausibly stay ULA-only (like camera) and
-   let any genuinely internet-facing exception device fall back to its existing IPv4 path instead of
-   needing a v6-specific firewall exception built at all. Worth deciding before WAN v6 is enabled on the
-   IoT VLAN, not after - changes the "iot: GUA yes" row above if decided the other way.
+4. ~~Given the IoT default-deny-outbound policy above, does IoT still need a GUA at all?~~ - decided:
+   IoT stays ULA-only, same as camera. Exceptions (e.g. a Shelly relay that still needs real internet
+   access) get their firewall rules managed over v4 connectivity, not v6 - avoids building any
+   v6-specific outbound exception at all. Reflected in the subnet-ID table above.
 
 ### Rollout order
 
@@ -170,8 +173,8 @@ doesn't exist across sites (Site Magic is v4-only, see "Status" above).
    GUA yet. Validates DNS/SLAAC/firewall-mirroring behavior internally without adding any new
    internet-facing exposure - deliberate choice, not wanting to double the exposure surface before the v4
    firewall-rule model (step 2) is proven.
-4. **Enable WAN v6** (PD + GUA) at steve's site, trial on one lab VLAN first, carry the validated
-   outbound-deny model over to it (see open item 4 above for whether IoT needs this at all).
+4. **Enable WAN v6** (PD + GUA) at steve's site, trial on one lab VLAN first. IoT and camera stay
+   ULA-only at this step and beyond (decided - see open item 4 above) - only default and guest get GUA.
 5. **Roll out remaining networks at steve's, then mum-and-dad's, then dan's.**
 
 ## Steve's site (14): current addressing, not yet migrated
