@@ -66,7 +66,7 @@ migrated.
 `Default` network object is being *repurposed* to carry the `management` role, not renamed away - this
 avoids touching whatever UniFi's own adoption/provisioning logic assumes about a network literally named
 `Default`. The network that actually carries the `default` *role*'s real client traffic gets a new UniFi
-display name instead (`Internal` or `Local` - exact name still TBD), even though this document keeps
+display name instead (`Local`), even though this document keeps
 calling that role `default` throughout. Don't confuse "the network named `Default` in the UniFi UI" with
 "the `default` role" when cross-referencing a live config against this file.
 
@@ -210,7 +210,7 @@ Steve's network needs reallocation to fit the scheme above - none of this has ha
 
 | Role | Current | Target |
 |---|---|---|
-| default | `172.16.0.0/24`, VLAN 1 (UniFi's built-in `Default` network) | `172.16.14.0/24`, VLAN 14, on a **new** UniFi network object (display name TBD - `Internal`/`Local`) |
+| default | `172.16.0.0/24`, VLAN 1 (UniFi's built-in `Default` network) | `172.16.14.0/24`, VLAN 14, on a **new** UniFi network object named `Local` |
 | iot | `172.16.2.0/24` | `192.168.14.0/24` |
 | camera | none | `10.0.14.0/24` (new) |
 | guest | `172.16.199.0/24` | `192.168.199.0/24` (shared with the other two sites) |
@@ -223,7 +223,7 @@ the naming gotcha in "Multi-site model" above) but re-IP'd onto `172.16.1.0/24`.
 already-existing, already-unused `management`-tagged VLAN gets deleted once that happens - its job is now
 done by the repurposed built-in object, and its reserved `172.16.1.0/24` address is what that object
 adopts, so no new address space is needed. Real client (`default`-role) traffic moves onto a **new**
-UniFi network object on VLAN 14 with a display name still TBD - deliberately not `Default`, to avoid
+UniFi network object on VLAN 14 named `Local` - deliberately not `Default`, to avoid
 confusion with the now-management-only built-in network of that name. Site Magic's tunnel selection needs
 updating in the same pass (see "Multi-site model" above - confirmed to be a config change, not a
 structural blocker).
