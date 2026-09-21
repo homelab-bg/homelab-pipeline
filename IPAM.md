@@ -64,6 +64,116 @@ field types can't be changed in place either (`"Changing the type of custom fiel
 had to delete and recreate it as `text`. Works fine for lookup purposes either way; nothing does arithmetic
 on `site_id` inside NetBox itself.
 
+## IPv6 addendum (dual-stack; IPv4 scheme unchanged)
+
+Layered on top of the multi-site model above - same sites, same roles, same site-to-site VPN
+constraints. AussieBroadband (ABB) is the ISP at all three sites. **Not yet applied anywhere** - this is
+the target scheme, sequenced behind the v4 migration below (see "Rollout order").
+
+### Status
+
+- ABB has IPv6 available at all three sites; not yet enabled on any UDM.
+- Site Magic (the UniFi site-to-site VPN overlay) is **IPv4-only** - no v6 across the overlay. v6 is
+  per-site; cross-site traffic keeps using v4, same as it does today.
+
+### Prefixes
+
+| Site (id) | ABB delegated GUA /48 | Notes |
+|---|---|---|
+| steve (14) | `2403:581e:bae5::/48` | static v4 |
+| mum-and-dad (15) | `2403:5819:cec1::/48` | static v4 |
+| dan (16) | TBD | personal plan, v4 is CGNAT - confirm PD is actually offered on this plan tier (not just its size) before assuming `/48`; record prefix + size once known |
+
+- **ULA**: one random `/48` shared across all three sites, `<ULA48>` (generate once per RFC 4193, never
+  `fd00::/48` - that's a documented example prefix, not a real one). Record in NetBox as a container
+  prefix. Sharing one `/48` across sites only avoids collisions because the subnet-ID convention below
+  already makes every site's subnet IDs globally unique (14/114/214/199 vs 15/115/215/199 vs
+  16/116/216/199) - if a future site ever reused an ID already in use elsewhere, its ULA subnets would
+  collide. Worth a note wherever the ULA `/48` gets recorded, same spirit as the `site_id` custom-field
+  gotcha above.
+- ABB's WAN `/64`s are the UDM-to-ISP link only - never assign one to a LAN.
+- ABB says delegated `/48`s can change occasionally: don't hard-code GUAs in firewall rules or DNS - use
+  ULA/hostnames/groups instead.
+
+### Subnet ID convention
+
+4th hextet = VLAN ID digits written **literally** (`14`, `114`, `214`, `199`), not hex-converted - a
+mnemonic, not an arithmetic encoding. Safe here because every VLAN ID in this scheme is built from
+decimal digits `0`-`9` only (never needs a hex letter `a`-`f`), so the literal digits always mean what
+they look like. GUA: `<site GUA48>:<vlan>::/64`; ULA: `<ULA48>:<vlan>::/64`.
+
+| Role | VLAN (14/15/16) | GUA | ULA |
+|---|---|---|---|
+| default | 14/15/16 | yes | yes |
+| iot | 114/115/116 | yes | yes |
+| camera | 214/215/216 | no | yes (or leave v4-only, see open items) |
+| guest | 199 | yes | no |
+
+Guest gets GUA but not ULA - it's internet-only and isolated by design (never talks to anything
+internal), so a stable internal-only address is pointless for it; default and iot get both since they
+need internet reachability *and* a stable address that survives ABB reassigning the delegated `/48`.
+
+### UniFi implementation
+
+- WAN: DHCPv6 with prefix delegation.
+- Networks: Prefix Delegation for GUA, ULA configured as an "Additional IPv6 Network" on the VLAN
+  interface, SLAAC for address assignment.
+
+### Firewall
+
+- Mirror every v4 zone policy for v6 (IoT and guest isolation) - v6 doesn't inherit v4's isolation just
+  because it's on the same VLAN; each policy needs its own v6 rule.
+- Allow ICMPv6 always - never blanket-block it. IPv6 depends on it for NDP/PMTUD/etc.; blocking it
+  breaks IPv6 itself, not just some feature riding on top of it.
+- Default-deny inbound GUA.
+- Block `fc00::/7` (the full ULA range, not just `fd00::/8`) at WAN - ULA should never leak onto the
+  internet.
+- **IoT: default-deny outbound, not just default-deny inbound.** Stated policy, not yet applied anywhere
+  (v4 or v6). Exceptions get added as explicit per-device firewall rules, not by opening the whole VLAN.
+  Example: Shelly relays currently reach the internet directly for cloud/app control - the preferred end
+  state is to cut that entirely and drive them solely through Home Assistant (LAN-local), removing the
+  need for an exception at all rather than adding one. This is a dual-stack policy - it applies to
+  today's v4 IoT VLAN too, not just the future v6 one - see "Rollout order" below for why it's sequenced
+  ahead of enabling v6 on IoT specifically.
+
+### DNS
+
+Cross-site service names return `A` records only - `AAAA` would send clients down a v6 path that
+doesn't exist across sites (Site Magic is v4-only, see "Status" above).
+
+### Open items (verify before applying)
+
+1. Does UniFi's Prefix ID field accept 4-digit IDs (e.g. `0214`)? If it's only 8-bit, every subnet ID in
+   this scheme (max `216`) still fits in a single byte, so the scheme survives either way - but confirm
+   against the actual UDM firmware before relying on that assumption.
+2. Can a camera VLAN be ULA-only (no GUA advertised at all)? Yes - an interface with only a ULA prefix
+   in its RA is a normal, fully-supported IPv6 configuration; devices get ULA + link-local and nothing
+   else. Not blocked on anything, just needs the camera VLAN's RA to omit the GUA prefix.
+3. Dan's delegated prefix - confirm PD is actually offered on that specific ABB personal-plan tier (not
+   just its size) before assuming `/48`; some residential tiers do CGNAT-v4 with no PD at all rather than
+   full delegation.
+4. **Given the IoT default-deny-outbound policy above, does IoT still need a GUA at all?** With outbound
+   denied by default and exceptions added per-device, IoT could plausibly stay ULA-only (like camera) and
+   let any genuinely internet-facing exception device fall back to its existing IPv4 path instead of
+   needing a v6-specific firewall exception built at all. Worth deciding before WAN v6 is enabled on the
+   IoT VLAN, not after - changes the "iot: GUA yes" row above if decided the other way.
+
+### Rollout order
+
+1. **Fix v4 first** - migrate steve's site to the target v4 scheme (see "Next steps" below). Not
+   parallel work: the v6 scheme's subnet IDs are derived from the v4-target VLAN IDs, so the v4 migration
+   is a hard prerequisite, not just a nice-to-do-first.
+2. **Validate the IoT default-deny-outbound firewall policy on v4** - apply it, work through the actual
+   exception list (Shelly and anything else currently phoning home), confirm nothing breaks. Deliberately
+   proven on v4 first, one well-understood stack, before adding v6 into the mix.
+3. **Enable IPv6 local-only** - ULA addressing via SLAAC across VLANs, no WAN prefix delegation and no
+   GUA yet. Validates DNS/SLAAC/firewall-mirroring behavior internally without adding any new
+   internet-facing exposure - deliberate choice, not wanting to double the exposure surface before the v4
+   firewall-rule model (step 2) is proven.
+4. **Enable WAN v6** (PD + GUA) at steve's site, trial on one lab VLAN first, carry the validated
+   outbound-deny model over to it (see open item 4 above for whether IoT needs this at all).
+5. **Roll out remaining networks at steve's, then mum-and-dad's, then dan's.**
+
 ## Steve's site (14): current addressing, not yet migrated
 
 Steve's network needs reallocation to fit the scheme above - none of this has happened yet, only the
@@ -234,9 +344,17 @@ redundant, same as `SECRETS.md`'s root-of-trust secrets being kept outside Infis
 
 ## Next steps
 
-- **Migrate steve's site** to the target scheme: default `172.16.0.0/24` → `172.16.14.0/24`, iot
-  `172.16.2.0/24` → `192.168.14.0/24`, guest `172.16.199.0/24` → `192.168.199.0/24` (shared), retire the
-  unused `management` VLAN, add a `camera` network (`10.0.14.0/24`) if/when cameras are added.
+- **Priority 1: migrate steve's site** to the target scheme: default `172.16.0.0/24` →
+  `172.16.14.0/24`, iot `172.16.2.0/24` → `192.168.14.0/24`, guest `172.16.199.0/24` →
+  `192.168.199.0/24` (shared), retire the unused `management` VLAN, add a `camera` network
+  (`10.0.14.0/24`) if/when cameras are added. Hard prerequisite for the IPv6 addendum's rollout below -
+  the v6 subnet IDs are derived from these v4-target VLAN IDs.
+- **Priority 2: apply the IoT default-deny-outbound firewall policy** (v4 first) - see the IPv6
+  addendum's "Firewall" and "Rollout order" sections above for the full policy and why it's sequenced
+  before any v6 exposure.
+- **Priority 3: enable IPv6, local-only first** (ULA via SLAAC, no WAN prefix delegation/GUA yet) - see
+  the IPv6 addendum above for the full scheme; WAN v6 (PD + GUA) comes only after steps 1-2 are proven
+  and open item 4 (whether IoT needs a GUA at all) is decided.
 - **Build out `mum-and-dad` (15) and `dan` (16)** in NetBox - sites, plus their `default`/`iot`/`camera`
   prefixes and the shared `guest` prefix.
 - **Decide on UniFi VLAN retagging** - whether to actually apply the `<id>`/`100+<id>`/`200+<id>`/`199`
