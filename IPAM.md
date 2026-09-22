@@ -125,13 +125,14 @@ the target scheme, sequenced behind the v4 migration below (see "Rollout order")
 | mum-and-dad (15) | `2403:5819:cec1::/48` | static v4 |
 | dan (16) | TBD | personal plan, v4 is CGNAT - confirm PD is actually offered on this plan tier (not just its size) before assuming `/48`; record prefix + size once known |
 
-- **ULA**: one random `/48` shared across all three sites, `<ULA48>` (generate once per RFC 4193, never
-  `fd00::/48` - that's a documented example prefix, not a real one). Record in NetBox as a container
-  prefix. Sharing one `/48` across sites only avoids collisions because the subnet-ID convention below
-  already makes every site's subnet IDs globally unique (14/114/214/199 vs 15/115/215/199 vs
-  16/116/216/199) - if a future site ever reused an ID already in use elsewhere, its ULA subnets would
-  collide. Worth a note wherever the ULA `/48` gets recorded, same spirit as the `site_id` custom-field
-  gotcha above.
+- **ULA**: `fdc5:279c:1ea3::/48` - one random `/48` shared across all three sites (generated via a real
+  CSPRNG, `fd` + 40 random bits, per RFC 4193; not `fd00::/48` - that's a documented example prefix, not
+  a real one). Not yet recorded in NetBox as a container prefix - this file is the source of truth for it
+  until that's done. Sharing one `/48` across sites only avoids collisions because the subnet-ID
+  convention below already makes every site's subnet IDs globally unique (14/114/214/199 vs
+  15/115/215/199 vs 16/116/216/199) - if a future site ever reused an ID already in use elsewhere, its
+  ULA subnets would collide. Worth a note wherever this gets recorded elsewhere, same spirit as the
+  `site_id` custom-field gotcha above.
 - ABB's WAN `/64`s are the UDM-to-ISP link only - never assign one to a LAN.
 - ABB says delegated `/48`s can change occasionally: don't hard-code GUAs in firewall rules or DNS - use
   ULA/hostnames/groups instead.
@@ -139,9 +140,23 @@ the target scheme, sequenced behind the v4 migration below (see "Rollout order")
 ### Subnet ID convention
 
 4th hextet = VLAN ID digits written **literally** (`14`, `114`, `214`, `199`), not hex-converted - a
-mnemonic, not an arithmetic encoding. Safe here because every VLAN ID in this scheme is built from
-decimal digits `0`-`9` only (never needs a hex letter `a`-`f`), so the literal digits always mean what
-they look like. GUA: `<site GUA48>:<vlan>::/64`; ULA: `<ULA48>:<vlan>::/64`.
+mnemonic, not an arithmetic encoding (and doesn't require the literal 802.1Q VLAN tag to already equal
+that number - see "Rollout order" below on using it ahead of a full retag). Safe here because every VLAN
+ID in this scheme is built from decimal digits `0`-`9` only (never needs a hex letter `a`-`f`), so the
+literal digits always mean what they look like. GUA: `<site GUA48>:<vlan>::/64`; ULA:
+`fdc5:279c:1ea3:<vlan>::/64`.
+
+**Every site/role ULA `/64`, computed** (nothing else to derive - this is the complete set for the
+current 3-site, 4-role-with-ULA scheme):
+
+| Role | VLAN | Steve (14) | Mum & Dad (15) | Dan (16) |
+|---|---|---|---|---|
+| local | 14/15/16 | `fdc5:279c:1ea3:14::/64` | `fdc5:279c:1ea3:15::/64` | `fdc5:279c:1ea3:16::/64` |
+| iot | 114/115/116 | `fdc5:279c:1ea3:114::/64` | `fdc5:279c:1ea3:115::/64` | `fdc5:279c:1ea3:116::/64` |
+| security | 214/215/216 | `fdc5:279c:1ea3:214::/64` | `fdc5:279c:1ea3:215::/64` | `fdc5:279c:1ea3:216::/64` |
+
+`guest` and `management` don't get ULA (guest is GUA-only, management stays v4-only - see the GUA/ULA
+role table below).
 
 | Role | VLAN (14/15/16) | GUA | ULA |
 |---|---|---|---|
